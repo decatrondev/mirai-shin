@@ -1,0 +1,49 @@
+/* Componentes compartidos: ventana, mosaico, botones y controles del panel de detalle. */
+.ms-win {
+  background: var(--win);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-win);
+  box-shadow: var(--shadow);
+  transition: transform .45s cubic-bezier(.2, .7, .2, 1), opacity .35s;
+}
+.ms-win-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 7px 12px; background: var(--win-bar); border-bottom: 1px solid var(--line);
+  border-radius: var(--radius-win) var(--radius-win) 0 0; font-size: .8rem; color: var(--muted); user-select: none;
+}
+.ms-dots { display: flex; gap: 5px; }
+.ms-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); display: block; }
+.ms-win-body { padding: clamp(16px, 2vw, 26px); display: grid; gap: 14px; }
+
+.ms-tile {
+  background: var(--tile); border: 2px solid var(--line); border-radius: var(--radius-win);
+  padding: clamp(18px, 2.2vw, 30px); display: grid; align-content: start; gap: 12px; min-width: 0;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  transition: border-color .15s, transform .45s cubic-bezier(.2, .7, .2, 1), opacity .35s;
+}
+.ms-tile.is-focus { border-color: var(--accent); }
+
+.ms-btn {
+  justify-self: start; display: inline-block; text-decoration: none; font-weight: 500; font-size: .95rem;
+  background: var(--accent); color: var(--on-accent); padding: 10px 16px; border-radius: var(--radius-control);
+}
+.ms-link { color: var(--accent); text-underline-offset: 3px; text-decoration-thickness: 1px; font-weight: 500; }
+.ms-chip {
+  font: inherit; font-size: .85rem; font-weight: 500; color: var(--fg); background: transparent;
+  border: 1px solid var(--line); border-radius: 5px; padding: 5px 10px; cursor: pointer; white-space: nowrap;
+}
+
+.ms-field { display: grid; gap: 6px; font-size: .85rem; color: var(--muted); }
+.ms-field input[type="range"] { width: 100%; accent-color: var(--accent); }
+.ms-swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+.ms-swatches button {
+  font: inherit; font-size: .82rem; font-weight: 500; color: var(--fg); padding: 5px 10px; border-radius: 5px; cursor: pointer;
+  background: transparent; border: 1px solid var(--line);
+}
+.ms-swatches button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.ms-check { display: flex; gap: 8px; align-items: center; font-size: .88rem; }
+.ms-check input { accent-color: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ms-win, .ms-tile { transition: none; }
+}

@@ -1,0 +1,15 @@
+/* Fuentes servidas desde el propio sitio (sin pedir nada a terceros).
+   Archivo (con eje de ancho) para titulares y Schibsted Grotesk para el texto.
+   Zen Old Mincho va recortada solo a los caracteres del kanji de brand.json (1,5 KB, licencia OFL en fonts/).
+   Si el kanji cambia, se regenera desde la fuente completa de google/fonts:
+   pyftsubset ZenOldMincho-SemiBold.ttf --text="<kanji>" --flavor=woff2 --layout-features='vert,vrt2' --output-file=zen-old-mincho-kanji.woff2 */
+@import "@fontsource-variable/archivo/wdth.css";
+@import "@fontsource-variable/schibsted-grotesk/index.css";
+
+@font-face {
+  font-family: "Zen Old Mincho";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../fonts/zen-old-mincho-kanji.woff2") format("woff2");
+}

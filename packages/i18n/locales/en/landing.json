@@ -1,0 +1,84 @@
+{
+  "meta": {
+    "description": "Animated wallpapers for Windows and Linux, built to use little. In development."
+  },
+  "hero": {
+    "welcome": "Welcome",
+    "title": "What you see when you move the windows aside",
+    "text": "{{brand}} puts animated wallpapers behind your windows, on Windows and Linux. It's built to use little.",
+    "status": "In development. There's no version to download yet.",
+    "stageLink": "See where it stands"
+  },
+  "app": {
+    "hint": "This page's background is a live wallpaper. These controls change it.",
+    "wallpaper": "Wallpaper",
+    "speed": "Speed",
+    "bright": "Brightness",
+    "pause": "Pause the wallpaper",
+    "noGl": "Your browser doesn't have WebGL turned on, so the wallpaper shows as a still image. This isn't an error.",
+    "reduced": "Your system asks for reduced motion, so the wallpaper stays still. Colors and brightness still change."
+  },
+  "palettes": {
+    "ink": "Ink",
+    "ember": "Ember",
+    "frost": "Frost"
+  },
+  "why": {
+    "title": "Why {{brand}}",
+    "pauseTerm": "Pauses on its own",
+    "pause": "When you play full screen, run on battery or lock the screen.",
+    "linuxTerm": "Real Linux support",
+    "linux": "Native Wayland on KDE, Hyprland and Sway.",
+    "monitorsTerm": "One wallpaper per monitor",
+    "monitors": "Or the same one on all of them, your choice."
+  },
+  "where": {
+    "title": "Where it runs",
+    "now": "Windows and Linux (KDE, Hyprland, Sway).",
+    "later": "GNOME and Mac, later on."
+  },
+  "monitors": {
+    "bar": "Monitors",
+    "title": "A different wallpaper on every screen",
+    "text": "Pick a screen and change its wallpaper. The others keep theirs. The names are the ones your system uses.",
+    "portrait": "{{name}}, portrait",
+    "primary": "{{name}}, primary",
+    "wallpaperFor": "Wallpaper for"
+  },
+  "stage": {
+    "title": "Where it stands",
+    "now": "Now",
+    "devTitle": "In development",
+    "dev": "The foundation is being built. There's no version to download yet.",
+    "firstTitle": "First release",
+    "first": "Image and video wallpapers on Windows and Linux, with automatic pauses.",
+    "laterTitle": "After that",
+    "later": "More Linux desktops, wallpapers generated in real time, and web wallpapers."
+  },
+  "oss": {
+    "title": "Open source",
+    "text": "The code is public under the AGPL‑3.0 license, with an exception so it can be published on Steam.",
+    "github": "See the project on GitHub"
+  },
+  "footer": {
+    "docs": "Documentation: coming soon",
+    "contact": "Contact",
+    "privacy": "This page uses no cookies or analytics."
+  },
+  "taskbar": {
+    "label": "Sections",
+    "showDesk": "Show desktop",
+    "hideDesk": "Back to the windows",
+    "showDeskShort": "Desktop",
+    "hideDeskShort": "Windows",
+    "home": "Home",
+    "why": "Why",
+    "monitors": "Monitors",
+    "stage": "Stage",
+    "gap": "Gap",
+    "fps": "fps on this page",
+    "paused": "paused",
+    "toLight": "Light theme",
+    "toDark": "Dark theme"
+  }
+}

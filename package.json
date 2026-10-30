@@ -1,0 +1,16 @@
+{
+  "name": "mirai-shin",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @mirai-shin/landing",
+    "build": "npm run build -w @mirai-shin/landing",
+    "typecheck": "npm run typecheck -w @mirai-shin/landing",
+    "check:i18n": "node packages/i18n/scripts/check.mjs",
+    "check:brand": "node scripts/check-brand.mjs",
+    "check": "npm run check:i18n && npm run check:brand && npm run typecheck && npm run build"
+  }
+}

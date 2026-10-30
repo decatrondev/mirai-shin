@@ -1,0 +1,144 @@
+/* Diseño propio de la landing: la página entera es un escritorio con un fondo vivo fijo detrás.
+   Inicio = ventanas, secciones = mosaico, monitores = tres pantallas. */
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+:root { --gap: 22px; --bar-h: 46px; }
+html { scroll-behavior: smooth; scroll-padding-top: 16px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0; min-height: 100vh; color: var(--fg); font: 16px/1.6 var(--sans);
+  /* respaldo sin WebGL: imagen fija con los colores del fondo */
+  background: var(--bg) linear-gradient(135deg, var(--w0), var(--w1) 55%, var(--w2)) fixed;
+  padding-bottom: calc(var(--bar-h) + env(safe-area-inset-bottom, 0px));
+  overflow-x: hidden;
+}
+h1, h2, h3 { margin: 0; text-wrap: balance; font-family: var(--head); font-stretch: 78%; font-weight: 700; line-height: 1.04; }
+p { margin: 0; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.wall { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z-index: 0; }
+main { position: relative; z-index: 1; }
+
+/* ---------- inicio ---------- */
+.hero { position: relative; min-height: calc(100svh - var(--bar-h)); }
+.w-read h1 { font-size: clamp(2.1rem, 4.4vw, 3.9rem); }
+.w-read p { color: var(--muted); max-width: 46ch; }
+.w-read .status { font-size: .88rem; }
+.w-app .ms-win-body { gap: 16px; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+.hint { font-size: .82rem; color: var(--muted); }
+
+/* el sello aparece una sola vez, sobre el fondo y detrás de las ventanas */
+.seal { position: absolute; z-index: 0; text-shadow: 0 2px 18px rgba(0, 0, 0, .25); pointer-events: none; }
+.seal.ink-light { color: #ffffff; }
+.seal.ink-dark { color: #1a1d22; }
+.seal .kanji { font-family: var(--kanji); font-weight: 600; line-height: 1; }
+.seal .motto { font-size: .9rem; font-weight: 500; opacity: .9; }
+
+@media (min-width: 900px) {
+  .hero .ms-win { position: absolute; z-index: 2; touch-action: none; }
+  .hero .ms-win-bar { cursor: grab; }
+  .hero .ms-win-bar:active { cursor: grabbing; }
+  .w-read { left: 6%; top: 11%; width: min(46%, 560px); }
+  .w-app { right: calc(4% + 140px); top: 20%; width: min(28%, 310px); }
+  .seal { right: 4%; bottom: 7%; display: grid; justify-items: center; gap: 14px; }
+  .seal .kanji { writing-mode: vertical-rl; font-size: clamp(64px, 6.4vw, 120px); letter-spacing: .06em; }
+  .seal .motto { writing-mode: vertical-rl; }
+}
+@media (max-width: 899.98px) {
+  .hero { display: grid; align-content: start; gap: 16px; padding: 20px 16px 28px; }
+  .seal { position: static; display: flex; align-items: baseline; gap: 12px; padding: 4px 2px; }
+  .seal .kanji { font-size: 2.6rem; }
+}
+
+/* ---------- mosaico ---------- */
+.tiled { padding: var(--gap); display: grid; gap: var(--gap); transition: padding .2s, gap .2s; }
+.tiled h2 { font-size: clamp(1.6rem, 2.7vw, 2.4rem); }
+.tiled p { color: var(--muted); max-width: 62ch; }
+.tiled .lead { color: var(--fg); font-size: 1.08rem; }
+
+.why { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+.terms { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 12px 24px; }
+.terms dt { font-weight: 500; }
+.terms dd { margin: 0; color: var(--muted); }
+
+/* ---------- monitores ---------- */
+.mons { padding: 0; gap: 0; overflow: hidden; }
+.mons .ms-win-bar { border-radius: 6px 6px 0 0; }
+.mons .ms-win-body { padding: clamp(18px, 2.2vw, 30px); gap: 20px; }
+.desk { display: flex; align-items: flex-end; justify-content: center; gap: clamp(8px, 1.8vw, 26px); padding-top: 8px; }
+.mon { display: grid; justify-items: center; background: transparent; border: 0; padding: 0; cursor: pointer; min-width: 0; color: inherit; font: inherit; }
+.mon .scr { position: relative; display: block; background: var(--bezel); padding: 5px; border-radius: 6px; outline: 2px solid transparent; outline-offset: 3px; }
+.mon[aria-pressed="true"] .scr { outline-color: var(--accent); }
+.mon canvas { display: block; width: 100%; height: 100%; border-radius: 2px; background: linear-gradient(135deg, var(--w0), var(--w1)); }
+.mon .neck { width: 12%; height: 18px; background: var(--stand); }
+.mon .base { width: 34%; height: 6px; border-radius: 3px; background: var(--stand); }
+.mon .tag { margin-top: 8px; font-size: .82rem; color: var(--muted); }
+.mon.m0 .scr { width: clamp(52px, 11vw, 170px); aspect-ratio: 9 / 16; }
+.mon.m1 .scr { width: clamp(130px, 36vw, 560px); aspect-ratio: 16 / 9; }
+.mon.m2 .scr { width: clamp(84px, 21vw, 330px); aspect-ratio: 16 / 10; }
+.mon-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-size: .92rem; color: var(--muted); }
+.mon-panel b { color: var(--fg); font-weight: 500; }
+
+/* ---------- etapa y cierre ---------- */
+.stage { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+.steps { margin: 4px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; counter-reset: step; }
+.steps li { counter-increment: step; display: grid; gap: 4px; align-content: start; padding-top: 12px; border-top: 2px solid var(--line); }
+.steps li::before { content: counter(step); font-family: var(--head); font-stretch: 70%; font-weight: 700; font-size: 1.8rem; line-height: 1; color: var(--muted); }
+.steps li.now { border-top-color: var(--accent); }
+.steps li.now::before { color: var(--accent); }
+.steps b { font-weight: 500; }
+.steps p { font-size: .92rem; }
+.steps .mark { font-size: .85rem; font-weight: 500; color: var(--accent); }
+
+.foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; padding-block: 16px; }
+.foot .name { font-family: var(--head); font-stretch: 78%; font-weight: 700; font-size: 1.2rem; }
+.foot a { color: var(--fg); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.foot .soon, .foot small { color: var(--muted); }
+.foot small { font-size: .88rem; }
+.foot .prefs { margin-left: auto; display: flex; gap: 8px; }
+
+@media (max-width: 899.98px) {
+  .why, .stage { grid-template-columns: minmax(0, 1fr); }
+  .terms { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .terms dd { margin-bottom: 10px; }
+  .steps { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .foot .prefs { margin-left: 0; }
+  .tiled { --gap: 14px; padding: 14px 16px; }
+  .mon .scr { padding: 3px; }
+}
+
+/* ---------- mostrar escritorio: se apartan todas las ventanas ---------- */
+.is-desktop .ms-win, .is-desktop .ms-tile { opacity: 0; pointer-events: none; }
+.is-desktop .hero .w-read { transform: translate(-60px, -30px) !important; }
+.is-desktop .hero .w-app { transform: translate(60px, 30px) !important; }
+.is-desktop .ms-tile { transform: scale(.97); }
+
+/* ---------- barra de tareas ---------- */
+.taskbar {
+  position: fixed; z-index: 10; left: 0; right: 0; bottom: 0; height: calc(var(--bar-h) + env(safe-area-inset-bottom, 0px));
+  padding: 0 max(12px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(12px, env(safe-area-inset-left, 0px));
+  display: flex; align-items: center; gap: 14px; background: var(--task); border-top: 1px solid var(--line);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); font-size: .85rem; color: var(--muted);
+}
+.ws { display: flex; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.ws a { display: flex; gap: 6px; align-items: center; text-decoration: none; padding: 4px 9px; border-radius: 5px; color: var(--muted); white-space: nowrap; }
+.ws a b { font-variant-numeric: tabular-nums; color: var(--fg); font-weight: 500; }
+.ws a[aria-current="true"] { background: var(--accent); color: var(--on-accent); }
+.ws a[aria-current="true"] b { color: var(--on-accent); }
+.tray { margin-left: auto; display: flex; align-items: center; gap: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tray b { color: var(--fg); font-weight: 500; }
+.tray .gap { display: flex; align-items: center; gap: 8px; }
+.tray input { width: 90px; accent-color: var(--accent); }
+.taskbar .short { display: none; }
+@media (max-width: 1180px) { .ws a span, .tray .clock { display: none; } }
+@media (max-width: 899.98px) { .tray .gap { display: none; } }
+@media (max-width: 560px) {
+  .taskbar { gap: 8px; }
+  .fps .unit { display: none; }
+  .taskbar .ms-chip { padding: 5px 8px; }
+  .ws a { padding: 4px 8px; }
+  .taskbar .long { display: none; }
+  .taskbar .short { display: inline-block; vertical-align: -3px; }
+}

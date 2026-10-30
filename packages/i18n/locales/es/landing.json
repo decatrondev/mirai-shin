@@ -1,0 +1,84 @@
+{
+  "meta": {
+    "description": "Fondos de pantalla animados para Windows y Linux, pensados para gastar poco. En desarrollo."
+  },
+  "hero": {
+    "welcome": "Bienvenida",
+    "title": "Lo que ves cuando apartas las ventanas",
+    "text": "{{brand}} pone fondos animados detrás de tus ventanas, en Windows y Linux. Está pensado para gastar poco.",
+    "status": "En desarrollo. Todavía no hay una versión para descargar.",
+    "stageLink": "En qué etapa está"
+  },
+  "app": {
+    "hint": "El fondo de esta página es un fondo vivo. Estos controles lo cambian.",
+    "wallpaper": "Fondo",
+    "speed": "Velocidad",
+    "bright": "Brillo",
+    "pause": "Pausar el fondo",
+    "noGl": "Tu navegador no tiene WebGL activo, así que el fondo se muestra como imagen fija. No es un error.",
+    "reduced": "Tu sistema pide reducir el movimiento, así que el fondo queda quieto. Los colores y el brillo sí cambian."
+  },
+  "palettes": {
+    "ink": "Tinta",
+    "ember": "Brasa",
+    "frost": "Escarcha"
+  },
+  "why": {
+    "title": "Por qué {{brand}}",
+    "pauseTerm": "Se pausa solo",
+    "pause": "Cuando juegas en pantalla completa, con batería o con la pantalla bloqueada.",
+    "linuxTerm": "Linux de verdad",
+    "linux": "Wayland nativo en KDE, Hyprland y Sway.",
+    "monitorsTerm": "Un fondo por monitor",
+    "monitors": "O el mismo en todos, como prefieras."
+  },
+  "where": {
+    "title": "Dónde funciona",
+    "now": "Windows y Linux (KDE, Hyprland, Sway).",
+    "later": "GNOME y Mac, más adelante."
+  },
+  "monitors": {
+    "bar": "Monitores",
+    "title": "Un fondo distinto en cada pantalla",
+    "text": "Elige una pantalla y cámbiale el fondo. Las otras siguen con el suyo. Los nombres son los que usa el sistema.",
+    "portrait": "{{name}}, vertical",
+    "primary": "{{name}}, principal",
+    "wallpaperFor": "Fondo para"
+  },
+  "stage": {
+    "title": "En qué etapa está",
+    "now": "Ahora",
+    "devTitle": "En desarrollo",
+    "dev": "Se está construyendo la base. Todavía no hay versión para descargar.",
+    "firstTitle": "Primera versión",
+    "first": "Fondos de imagen y video en Windows y Linux, con pausas automáticas.",
+    "laterTitle": "Después",
+    "later": "Más escritorios de Linux, fondos generados en tiempo real y fondos web."
+  },
+  "oss": {
+    "title": "Código abierto",
+    "text": "El código es público con licencia AGPL‑3.0, con una excepción para poder publicar en Steam.",
+    "github": "Ver el proyecto en GitHub"
+  },
+  "footer": {
+    "docs": "Documentación: pronto",
+    "contact": "Contacto",
+    "privacy": "Esta página no usa cookies ni analíticas."
+  },
+  "taskbar": {
+    "label": "Secciones",
+    "showDesk": "Mostrar escritorio",
+    "hideDesk": "Volver a las ventanas",
+    "showDeskShort": "Escritorio",
+    "hideDeskShort": "Ventanas",
+    "home": "Inicio",
+    "why": "Por qué",
+    "monitors": "Monitores",
+    "stage": "Etapa",
+    "gap": "Separación",
+    "fps": "cuadros/s en esta página",
+    "paused": "en pausa",
+    "toLight": "Tema claro",
+    "toDark": "Tema oscuro"
+  }
+}

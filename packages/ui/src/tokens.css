@@ -1,0 +1,54 @@
+/* Tokens del sistema de diseño, compartidos por la landing y la app de escritorio.
+   Oscuro por defecto; el claro se activa con data-theme="light" en <html>. Colores provisionales. */
+:root {
+  color-scheme: dark;
+  --bg: #121419;
+  --win: #1d2026;
+  --win-bar: #252930;
+  --tile: rgba(18, 20, 26, .66);
+  --fg: #eceef2;
+  --muted: #a2a8b3;
+  --line: #333842;
+  --accent: #4fd1b5;
+  --on-accent: #0c2a24;
+  --task: rgba(20, 22, 27, .84);
+  --shadow: 0 18px 40px rgba(0, 0, 0, .35);
+
+  /* fondo «Tinta»: también es el respaldo sin WebGL */
+  --w0: #0d1a1f;
+  --w1: #1d5a5c;
+  --w2: #c98a4b;
+  --w3: #e9d8b4;
+
+  /* monitores dibujados */
+  --bezel: #050608;
+  --stand: #2a2d34;
+
+  --sans: "Schibsted Grotesk Variable", "Segoe UI", system-ui, sans-serif;
+  --head: "Archivo Variable", "Arial Narrow", system-ui, sans-serif;
+  --kanji: "Zen Old Mincho", serif;
+
+  --radius-win: 8px;
+  --radius-control: 6px;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #e9ebef;
+  --win: #f7f8fa;
+  --win-bar: #e9ecf0;
+  --tile: rgba(248, 249, 251, .76);
+  --fg: #1a1d22;
+  --muted: #5b616c;
+  --line: #d3d7de;
+  --accent: #0f8a73;
+  --on-accent: #ffffff;
+  --task: rgba(244, 246, 249, .88);
+  --shadow: 0 18px 40px rgba(30, 40, 60, .18);
+  --w0: #dfe9e6;
+  --w1: #8fc2b8;
+  --w2: #e6b07a;
+  --w3: #fbf3e2;
+  --bezel: #20232a;
+  --stand: #b9bec7;
+}
