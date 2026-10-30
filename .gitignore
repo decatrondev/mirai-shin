@@ -1,0 +1,24 @@
+# Internal plans and the design preview served by nginx (not part of the repo)
+/.dev/
+/preview/
+
+# Node
+node_modules/
+dist/
+*.log
+*.tsbuildinfo
+
+# Rust
+/target
+**/target
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

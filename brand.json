@@ -1,0 +1,14 @@
+{
+  "name": "Mirai Shin",
+  "kanji": "未来・芯",
+  "motto": {
+    "en": "The core of tomorrow",
+    "es": "El núcleo del mañana"
+  },
+  "slug": "mirai-shin",
+  "appId": "net.decatron.MiraiShin",
+  "domain": "miraishin.decatron.net",
+  "repo": "https://github.com/decatrondev/mirai-shin",
+  "org": "Decatron",
+  "orgUrl": "https://anthonydeca.decatron.net"
+}
