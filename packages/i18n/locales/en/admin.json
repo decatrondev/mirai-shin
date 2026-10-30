@@ -1,0 +1,118 @@
+{
+  "title": "Panel",
+  "loading": "Loading…",
+  "login": {
+    "title": "Sign in",
+    "intro": "{{brand}} internal panel. Sign in with the email and password you were given.",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "back": "Back to the site"
+  },
+  "change": {
+    "title": "Change your password",
+    "intro": "You're using a temporary password. Choose your own before you see the panel. This isn't an error: it only happens once.",
+    "current": "Temporary password",
+    "currentAccount": "Current password",
+    "new": "New password",
+    "repeat": "Repeat the new password",
+    "hint": "At least {{min}} characters. A phrase you remember works.",
+    "submit": "Save password",
+    "done": "Password saved. Your other open sessions were closed.",
+    "mismatch": "The two new passwords don't match."
+  },
+  "nav": {
+    "guide": "Guide",
+    "docs": "Documents",
+    "users": "Users",
+    "account": "Account",
+    "search": "Search the documents",
+    "index": "Index",
+    "close": "Close index",
+    "logout": "Sign out",
+    "site": "View the site"
+  },
+  "status": {
+    "updated": "Updated {{when}}",
+    "role": "Role: {{role}}"
+  },
+  "roles": {
+    "VIEWER": "Read only",
+    "ADMIN": "Admin",
+    "SUPERADMIN": "Superadmin"
+  },
+  "guide": {
+    "title": "Panel guide",
+    "lead": "This is where {{brand}}'s internal documents live: the plans, the dated decisions, the status of each part and the rules we work by.",
+    "whatTitle": "What you'll find",
+    "what1": "“Work rules”: how we work on any project (language, how we decide, how we test, how we publish).",
+    "what2": "“General plan”: the whole app. PLAN is the idea and the phases; STATUS is what was done each day; the chat kickoff sums up where we left off.",
+    "what3": "“Landing”: the website, with its plan, status and design plan.",
+    "howTitle": "How to use it",
+    "how1": "Pick a document in the index on the left (on a phone, with the “Index” button).",
+    "how2": "Use search to find a word in every document; case and accents don't matter.",
+    "how3": "Documents are read straight from the project plans: when something is written down, it shows up here on its own.",
+    "notesTitle": "Good to know",
+    "note1": "Internal documents are in Spanish, even when the panel is in English.",
+    "note2": "Images and HTML previews from the plans aren't shown here. The design directions are at {{url}}.",
+    "note3": "Your session lasts 12 hours. If someone changes your password, the session ends on its own.",
+    "rolesTitle": "Roles",
+    "roleViewer": "Read only: sees the documents marked for everyone.",
+    "roleAdmin": "Admin: also sees the administration documents.",
+    "roleSuper": "Superadmin: sees everything and manages panel users."
+  },
+  "doc": {
+    "notFound": "That document doesn't exist or was moved. Pick another one in the index.",
+    "empty": "There are no documents you can see yet."
+  },
+  "search": {
+    "title": "Results for “{{q}}”",
+    "none": "No results for “{{q}}”. Try another word.",
+    "short": "Type at least 2 characters.",
+    "inTitle": "Matches the title"
+  },
+  "users": {
+    "title": "Panel users",
+    "intro": "New passwords are temporary: they're shown once and the person must change it when signing in.",
+    "email": "Email",
+    "role": "Role",
+    "created": "Added",
+    "lastLogin": "Last sign-in",
+    "never": "Never",
+    "pending": "Temporary password not changed yet",
+    "you": "You",
+    "add": "Add user",
+    "create": "Create with a temporary password",
+    "reset": "New temporary password",
+    "remove": "Remove",
+    "confirmRemove": "Remove {{email}} from the panel? They lose access right away.",
+    "confirmReset": "Give {{email}} a new temporary password? Their current session ends.",
+    "tempTitle": "Temporary password for {{email}}",
+    "tempText": "Copy it and send it over a private channel. It won't be shown again.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "close": "Done"
+  },
+  "account": {
+    "title": "Your account",
+    "email": "Email",
+    "role": "Role",
+    "changeTitle": "Change password"
+  },
+  "errors": {
+    "unauthorized": "The email or password doesn't match.",
+    "too_many_attempts": "Too many failed attempts. Wait 15 minutes and try again.",
+    "password_too_short": "The new password is too short.",
+    "password_same": "The new password must be different from the current one.",
+    "wrong_password": "The current password isn't correct.",
+    "invalid_email": "That email doesn't look valid.",
+    "email_taken": "There's already a user with that email.",
+    "cannot_delete_self": "You can't remove yourself.",
+    "cannot_reset_self": "Change your own password in “Account”.",
+    "forbidden": "Your role can't see this.",
+    "not_found": "Not found.",
+    "invalid_query": "Search must be between 2 and 100 characters.",
+    "network": "Can't reach the server. Check your connection and try again.",
+    "generic": "Something failed on the server. Try again in a moment."
+  }
+}

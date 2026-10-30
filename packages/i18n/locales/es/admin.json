@@ -1,0 +1,118 @@
+{
+  "title": "Panel",
+  "loading": "Cargando…",
+  "login": {
+    "title": "Iniciar sesión",
+    "intro": "Panel interno de {{brand}}. Entra con el correo y la clave que te dieron.",
+    "email": "Correo",
+    "password": "Clave",
+    "submit": "Entrar",
+    "back": "Volver al sitio"
+  },
+  "change": {
+    "title": "Cambia tu clave",
+    "intro": "Estás usando una clave temporal. Antes de ver el panel, elige una tuya. No es un error: pasa una sola vez.",
+    "current": "Clave temporal",
+    "currentAccount": "Clave actual",
+    "new": "Clave nueva",
+    "repeat": "Repite la clave nueva",
+    "hint": "Al menos {{min}} caracteres. Una frase que recuerdes sirve.",
+    "submit": "Guardar clave",
+    "done": "Clave guardada. Las demás sesiones abiertas se cerraron.",
+    "mismatch": "Las dos claves nuevas no coinciden."
+  },
+  "nav": {
+    "guide": "Guía",
+    "docs": "Documentos",
+    "users": "Usuarios",
+    "account": "Cuenta",
+    "search": "Buscar en los documentos",
+    "index": "Índice",
+    "close": "Cerrar índice",
+    "logout": "Salir",
+    "site": "Ver el sitio"
+  },
+  "status": {
+    "updated": "Actualizado {{when}}",
+    "role": "Rol: {{role}}"
+  },
+  "roles": {
+    "VIEWER": "Lectura",
+    "ADMIN": "Admin",
+    "SUPERADMIN": "Superadmin"
+  },
+  "guide": {
+    "title": "Guía del panel",
+    "lead": "Aquí están los documentos internos de {{brand}}: los planes, las decisiones con su fecha, el estado de cada parte y las reglas con las que trabajamos.",
+    "whatTitle": "Qué vas a encontrar",
+    "what1": "«Reglas de trabajo»: cómo trabajamos en cualquier proyecto (idioma, cómo se decide, cómo se prueba, cómo se publica).",
+    "what2": "«Plan general»: la app completa. PLAN es la idea y las fases; ESTADO, lo que se hizo cada día; el arranque de chat resume dónde quedamos.",
+    "what3": "«Landing»: el sitio web, con su plan, su estado y el plan de diseño.",
+    "howTitle": "Cómo usarlo",
+    "how1": "Elige un documento en el índice de la izquierda (en el celular, con el botón «Índice»).",
+    "how2": "Usa la búsqueda para encontrar una palabra en todos los documentos; no importan las mayúsculas ni las tildes.",
+    "how3": "Los documentos se leen directo de los planes del proyecto: cuando se anota algo, aparece aquí sin hacer nada.",
+    "notesTitle": "A tener en cuenta",
+    "note1": "Los documentos internos están en español, aunque el panel esté en inglés.",
+    "note2": "Las imágenes y las vistas previas en HTML de los planes no se muestran aquí. Las direcciones de diseño se ven en {{url}}.",
+    "note3": "Tu sesión dura 12 horas. Si alguien te cambia la clave, la sesión se cierra sola.",
+    "rolesTitle": "Roles",
+    "roleViewer": "Lectura: ve los documentos marcados para todos.",
+    "roleAdmin": "Admin: ve también los documentos de administración.",
+    "roleSuper": "Superadmin: ve todo y gestiona los usuarios del panel."
+  },
+  "doc": {
+    "notFound": "Ese documento no existe o se movió. Elige otro en el índice.",
+    "empty": "Todavía no hay documentos que puedas ver."
+  },
+  "search": {
+    "title": "Resultados para «{{q}}»",
+    "none": "No hay resultados para «{{q}}». Prueba con otra palabra.",
+    "short": "Escribe al menos 2 caracteres.",
+    "inTitle": "Coincide en el título"
+  },
+  "users": {
+    "title": "Usuarios del panel",
+    "intro": "Las claves nuevas son temporales: se muestran una sola vez y la persona debe cambiarla al entrar.",
+    "email": "Correo",
+    "role": "Rol",
+    "created": "Alta",
+    "lastLogin": "Último ingreso",
+    "never": "Nunca",
+    "pending": "Clave temporal sin cambiar",
+    "you": "Tú",
+    "add": "Agregar usuario",
+    "create": "Crear con clave temporal",
+    "reset": "Nueva clave temporal",
+    "remove": "Quitar",
+    "confirmRemove": "¿Quitar a {{email}} del panel? Pierde el acceso al instante.",
+    "confirmReset": "¿Darle una clave temporal nueva a {{email}}? Su sesión actual se cierra.",
+    "tempTitle": "Clave temporal de {{email}}",
+    "tempText": "Cópiala y pásala por un canal privado. No se vuelve a mostrar.",
+    "copy": "Copiar",
+    "copied": "Copiada",
+    "close": "Listo"
+  },
+  "account": {
+    "title": "Tu cuenta",
+    "email": "Correo",
+    "role": "Rol",
+    "changeTitle": "Cambiar la clave"
+  },
+  "errors": {
+    "unauthorized": "El correo o la clave no coinciden.",
+    "too_many_attempts": "Demasiados intentos fallidos. Espera 15 minutos y vuelve a probar.",
+    "password_too_short": "La clave nueva es muy corta.",
+    "password_same": "La clave nueva tiene que ser distinta de la actual.",
+    "wrong_password": "La clave actual no es correcta.",
+    "invalid_email": "Ese correo no tiene un formato válido.",
+    "email_taken": "Ya hay un usuario con ese correo.",
+    "cannot_delete_self": "No puedes quitarte a ti mismo.",
+    "cannot_reset_self": "Tu propia clave se cambia en «Cuenta».",
+    "forbidden": "Tu rol no permite ver esto.",
+    "not_found": "No se encontró.",
+    "invalid_query": "La búsqueda debe tener entre 2 y 100 caracteres.",
+    "network": "No hay conexión con el servidor. Revisa tu internet y vuelve a probar.",
+    "generic": "Algo falló en el servidor. Vuelve a probar en un momento."
+  }
+}

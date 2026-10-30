@@ -1,6 +1,6 @@
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
-import { LANGS, landing, type Lang } from '@mirai-shin/i18n'
+import { LANGS, admin, landing, type Lang } from '@mirai-shin/i18n'
 import brand from '@brand'
 
 function initial(): Lang {
@@ -12,7 +12,11 @@ function initial(): Lang {
 }
 
 i18n.use(initReactI18next).init({
-  resources: { es: { translation: landing.es }, en: { translation: landing.en } },
+  // `translation` = la landing; `admin` = el panel.
+  resources: {
+    es: { translation: landing.es, admin: admin.es },
+    en: { translation: landing.en, admin: admin.en },
+  },
   lng: initial(),
   fallbackLng: 'es',
   interpolation: {

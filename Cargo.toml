@@ -1,0 +1,35 @@
+[workspace]
+resolver = "2"
+members = [
+    "services/web",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+# AGPL-3.0 con la excepción para el Steamworks SDK de LICENSE-EXCEPTION.md
+license = "AGPL-3.0-only"
+repository = "https://github.com/decatrondev/mirai-shin"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+axum = { version = "0.8", features = ["macros"] }
+tower-http = { version = "0.6", features = ["trace"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "migrate"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "2"
+anyhow = "1"
+jsonwebtoken = "9"
+argon2 = "0.5"
+rand = "0.8"
+dotenvy = "0.15"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
