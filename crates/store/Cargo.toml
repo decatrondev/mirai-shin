@@ -1,0 +1,23 @@
+[package]
+name = "miraishin-store"
+description = "Biblioteca local (SQLite, índice de la carpeta de fondos), ajustes TOML y rutas por sistema"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+miraishin-brand = { workspace = true }
+miraishin-core = { workspace = true }
+rusqlite = { workspace = true }
+toml_edit = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+sha2 = { workspace = true }
+dirs = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

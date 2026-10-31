@@ -1,0 +1,21 @@
+[package]
+name = "miraishin-ipc"
+description = "Protocolo app ↔ daemon v1 (una línea JSON por mensaje) sobre socket Unix / named pipe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+miraishin-brand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+futures-util = { workspace = true }
+dirs = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

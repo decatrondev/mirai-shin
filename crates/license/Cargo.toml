@@ -1,0 +1,10 @@
+[package]
+name = "miraishin-license"
+description = "Interfaz de licencias (decisión 17). La verificación real llega en la fase 6B"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { workspace = true }

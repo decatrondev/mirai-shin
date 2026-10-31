@@ -1,0 +1,27 @@
+[package]
+name = "miraishin-daemon"
+description = "Daemon: mantiene la biblioteca, escribe logs y responde por IPC. Dibuja desde la fase 1"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "miraishin-daemon"
+path = "src/main.rs"
+
+[dependencies]
+miraishin-brand = { workspace = true }
+miraishin-store = { workspace = true }
+miraishin-ipc = { workspace = true }
+miraishin-logging = { workspace = true }
+miraishin-license = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

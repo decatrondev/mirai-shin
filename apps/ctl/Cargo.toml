@@ -1,0 +1,18 @@
+[package]
+name = "miraishin-ctl"
+description = "Consola para hablar con el daemon: estado, biblioteca, reescanear, apagar. Se distribuye con la app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "miraishin-ctl"
+path = "src/main.rs"
+
+[dependencies]
+miraishin-brand = { workspace = true }
+miraishin-store = { workspace = true }
+miraishin-ipc = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }

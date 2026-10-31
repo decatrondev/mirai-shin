@@ -1,0 +1,11 @@
+[package]
+name = "miraishin-brand"
+description = "Identidad del producto leída de brand.json (única fuente del nombre)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

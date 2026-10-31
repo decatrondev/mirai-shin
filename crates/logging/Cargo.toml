@@ -1,0 +1,16 @@
+[package]
+name = "miraishin-logging"
+description = "Logs a archivo con rotación diaria (y a la consola en desarrollo)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
+anyhow = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

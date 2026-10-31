@@ -1,6 +1,14 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/brand",
+    "crates/core",
+    "crates/store",
+    "crates/ipc",
+    "crates/logging",
+    "crates/license",
+    "apps/daemon",
+    "apps/ctl",
     "services/web",
 ]
 
@@ -28,6 +36,22 @@ jsonwebtoken = "9"
 argon2 = "0.5"
 rand = "0.8"
 dotenvy = "0.15"
+rusqlite = { version = "0.32", features = ["bundled", "backup"] }
+toml_edit = "0.25"
+tokio-util = { version = "0.7", features = ["codec"] }
+futures-util = { version = "0.3", features = ["sink"] }
+tracing-appender = "0.2"
+dirs = "7"
+sha2 = "0.10"
+tempfile = "3"
+
+# Crates propios
+miraishin-brand = { path = "crates/brand" }
+miraishin-core = { path = "crates/core" }
+miraishin-store = { path = "crates/store" }
+miraishin-ipc = { path = "crates/ipc" }
+miraishin-logging = { path = "crates/logging" }
+miraishin-license = { path = "crates/license" }
 
 [profile.release]
 lto = "thin"
