@@ -1,7 +1,9 @@
 //! Prueba manual de la superficie (sin pantalla: Sway con `WLR_BACKENDS=headless` + grim).
 //! Pone un color distinto en cada monitor, y lo vuelve a poner cuando uno aparece o cambia.
 //!
-//! Uso: cargo run -p miraishin-surface-wayland --example show -- [segundos]
+//! Con una imagen, la pone en todos los monitores (rellenar) en vez de los colores.
+//!
+//! Uso: cargo run -p miraishin-surface-wayland --example show -- [segundos] [imagen]
 
 #[cfg(target_os = "linux")]
 fn main() {
@@ -21,6 +23,7 @@ fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(10);
 
+    let image = std::env::args().nth(2).map(std::path::PathBuf::from);
     let (tx, rx) = mpsc::channel();
     let mut surface = match WaylandSurface::connect(Box::new(move |e| {
         let _ = tx.send(e);
@@ -34,7 +37,23 @@ fn main() {
 
     let paint = |surface: &mut WaylandSurface, o: &OutputInfo, n: usize| {
         let px = o.pixel_size();
-        let frame = Frame::solid(px, COLORS[n % COLORS.len()]).expect("cuadro");
+        let frame = match &image {
+            Some(path) => {
+                let t = Instant::now();
+                let opts = miraishin_render_image::Options::default();
+                match miraishin_render_image::render_file(path, px, &opts) {
+                    Ok(f) => {
+                        println!("imagen lista en {} ms", t.elapsed().as_millis());
+                        f
+                    }
+                    Err(e) => {
+                        println!("imagen: {e}");
+                        return;
+                    }
+                }
+            }
+            None => Frame::solid(px, COLORS[n % COLORS.len()]).expect("cuadro"),
+        };
         let r = surface.show(&o.name, frame);
         println!(
             "show {} ({}×{} lógicos, {} %, {}×{} px) color #{}: {:?}",

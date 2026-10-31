@@ -1,0 +1,11 @@
+[package]
+name = "miraishin-render-image"
+description = "Imagen fija: decodifica png/jpg/webp (con orientación EXIF), la encuadra y escala al tamaño del monitor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+miraishin-core = { workspace = true }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }

@@ -12,3 +12,6 @@ miraishin-core = { workspace = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 miraishin-brand = { workspace = true }
 smithay-client-toolkit = { version = "0.21", default-features = false, features = ["calloop"] }
+
+[dev-dependencies]
+miraishin-render-image = { workspace = true }

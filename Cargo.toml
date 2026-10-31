@@ -8,6 +8,7 @@ members = [
     "crates/logging",
     "crates/license",
     "crates/surface-wayland",
+    "crates/render-image",
     "apps/daemon",
     "apps/ctl",
     "tools/layer-probe",
@@ -55,6 +56,7 @@ miraishin-ipc = { path = "crates/ipc" }
 miraishin-logging = { path = "crates/logging" }
 miraishin-license = { path = "crates/license" }
 miraishin-surface-wayland = { path = "crates/surface-wayland" }
+miraishin-render-image = { path = "crates/render-image" }
 
 [profile.release]
 lto = "thin"
