@@ -29,12 +29,11 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     FindWindowW, GetClientRect, GetMessageW, GetWindowLongPtrW, IsWindow, KillTimer, PeekMessageW,
     PostThreadMessageW, RegisterClassExW, RegisterWindowMessageW, SendMessageTimeoutW,
     SetLayeredWindowAttributes, SetParent, SetTimer, SetWindowLongPtrW, SetWindowPos,
-    TranslateMessage, GWL_EXSTYLE, GWL_STYLE, HTTRANSPARENT, HWND_BOTTOM, HWND_TOP, LWA_ALPHA,
-    MA_NOACTIVATE, MSG, PM_NOREMOVE, SMTO_ABORTIFHUNG, SMTO_NORMAL, SWP_FRAMECHANGED,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, WM_APP, WM_DISPLAYCHANGE,
-    WM_DPICHANGED, WM_ERASEBKGND, WM_MOUSEACTIVATE, WM_NCDESTROY, WM_NCHITTEST, WM_PAINT,
-    WM_SETTINGCHANGE, WM_TIMER, WNDCLASSEXW, WS_CHILD, WS_CLIPSIBLINGS, WS_EX_LAYERED,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_POPUP,
+    TranslateMessage, GWL_EXSTYLE, GWL_STYLE, HTTRANSPARENT, HWND_TOP, LWA_ALPHA, MA_NOACTIVATE,
+    MSG, PM_NOREMOVE, SMTO_ABORTIFHUNG, SMTO_NORMAL, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
+    SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, WM_APP, WM_DISPLAYCHANGE, WM_DPICHANGED,
+    WM_ERASEBKGND, WM_MOUSEACTIVATE, WM_NCDESTROY, WM_NCHITTEST, WM_PAINT, WM_SETTINGCHANGE,
+    WM_TIMER, WNDCLASSEXW, WS_CHILD, WS_CLIPSIBLINGS, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_POPUP,
 };
 
 use crate::layout::{
@@ -458,12 +457,10 @@ impl State {
         let Some(host) = &self.host else { return };
         let raised = host.form == DesktopForm::Raised;
         let size = monitor.rect.size();
-        let mut ex = WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT;
-        if raised {
-            ex |= WS_EX_LAYERED;
-        }
+        // Sin estilos extendidos al crearla: con WS_EX_TRANSPARENT, TOOLWINDOW o NOACTIVATE
+        // no se probó que se vea, y los clics ya pasan por WM_NCHITTEST.
         let hwnd = CreateWindowExW(
-            ex,
+            0,
             self.wall_class.as_ptr(),
             null(),
             WS_POPUP,
@@ -483,10 +480,6 @@ impl State {
                 "CreateWindowExW failed"
             );
             return;
-        }
-        // En la forma elevada el estilo layered va antes de SetParent.
-        if raised && SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA) == 0 {
-            tracing::warn!(error = GetLastError(), "SetLayeredWindowAttributes failed");
         }
         PAINTED.with_borrow_mut(|p| p.insert(hwnd as isize, painted));
         SetWindowLongPtrW(hwnd, GWL_STYLE, (WS_CHILD | WS_CLIPSIBLINGS) as isize);
@@ -510,16 +503,27 @@ impl State {
             h,
             SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED,
         );
-        if !host.workerw.is_null() {
-            SetWindowPos(
-                host.workerw,
-                HWND_BOTTOM,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-            );
+        if raised {
+            // El estilo layered va DESPUÉS de colgarla de Progman y mostrarla. Probado en
+            // Windows 11 25H2 (2026-10-31): puesto antes (en la ventana oculta, antes de
+            // SetParent) la ventana queda en el orden correcto pero no se ve nunca; puesto
+            // con la ventana ya hija y visible, se ve debajo de los íconos.
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, WS_EX_LAYERED as isize);
+            if SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA) == 0 {
+                tracing::warn!(error = GetLastError(), "SetLayeredWindowAttributes failed");
+            }
+            if !host.workerw.is_null() {
+                SetWindowPos(
+                    host.workerw,
+                    hwnd,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                );
+            }
+            InvalidateRect(hwnd, null(), 0);
         }
         tracing::info!(output = name, x, y, w, h, "wallpaper window shown");
         self.windows.insert(name.to_string(), hwnd);
