@@ -140,6 +140,12 @@ pub struct StatusResult {
     pub surface: String,
     #[serde(default)]
     pub surface_available: bool,
+    /// Escritorio detectado (`XDG_CURRENT_DESKTOP`, por ejemplo `KDE`), vacío si no hay.
+    #[serde(default)]
+    pub desktop: String,
+    /// Tipo de sesión (`wayland`, `x11`), vacío si no se sabe.
+    #[serde(default)]
+    pub session: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

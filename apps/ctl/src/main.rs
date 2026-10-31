@@ -212,6 +212,18 @@ fn print_human(lang: Language, method: &str, value: Value) {
                 )
             );
             println!("{}", fill(t(lang, "status_license"), &[&s.license]));
+            let unknown = t(lang, "status_unknown");
+            let desktop = if s.desktop.is_empty() {
+                unknown
+            } else {
+                &s.desktop
+            };
+            let session = if s.session.is_empty() {
+                unknown
+            } else {
+                &s.session
+            };
+            println!("{}", fill(t(lang, "status_desktop"), &[desktop, session]));
             print_surface(lang, &s.surface, s.surface_available);
         }
         methods::OUTPUTS_LIST => print_outputs(lang, value),

@@ -244,6 +244,8 @@ impl Daemon {
             license: self.license.kind().to_string(),
             surface: self.display.surface().0.to_string(),
             surface_available: self.display.surface().1,
+            desktop: env_text("XDG_CURRENT_DESKTOP"),
+            session: env_text("XDG_SESSION_TYPE"),
         })
     }
 
@@ -326,6 +328,16 @@ impl Daemon {
 fn internal(e: impl std::fmt::Display) -> RpcError {
     tracing::error!(error = %e, "internal error");
     RpcError::new(codes::INTERNAL)
+}
+
+/// Variable de entorno para mostrar: corta y sin caracteres de control.
+fn env_text(key: &str) -> String {
+    std::env::var(key)
+        .unwrap_or_default()
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(64)
+        .collect()
 }
 
 fn parse<T: serde::de::DeserializeOwned>(params: Value) -> Result<T, RpcError> {

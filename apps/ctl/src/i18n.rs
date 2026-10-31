@@ -64,6 +64,8 @@ const TEXTS: &[(&str, &str, &str)] = &[
     ("status_folder", "Carpeta de fondos: {}", "Wallpapers folder: {}"),
     ("status_folder_missing", "  (no existe)", "  (does not exist)"),
     ("status_counts", "Fondos: {} válidos, {} con problemas", "Wallpapers: {} valid, {} with problems"),
+    ("status_desktop", "Escritorio: {} (sesión {})", "Desktop: {} ({} session)"),
+    ("status_unknown", "no se sabe", "unknown"),
     ("status_license", "Licencia: {}", "License: {}"),
     ("list_empty", "La biblioteca está vacía. Copia carpetas de fondos a la carpeta de fondos y usa «rescan».",
      "The library is empty. Copy wallpaper folders into the wallpapers folder and run \"rescan\"."),
