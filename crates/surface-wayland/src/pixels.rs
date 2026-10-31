@@ -5,7 +5,12 @@ use miraishin_core::surface::{Scale, Size};
 /// Pasa RGBA (orden de bytes R, G, B, A) a `Xrgb8888` de `wl_shm`, que en memoria es
 /// B, G, R, X (entero de 32 bits en little-endian). El fondo es opaco: el alfa se descarta.
 pub fn rgba_to_xrgb(rgba: &[u8], out: &mut [u8]) {
-    for (src, dst) in rgba.chunks_exact(4).zip(out.chunks_exact_mut(4)) {
+    for (src, dst) in rgba
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(out.as_chunks_mut::<4>().0)
+    {
         dst[0] = src[2];
         dst[1] = src[1];
         dst[2] = src[0];
