@@ -8,8 +8,12 @@ sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
 command: miraishin-daemon
 finish-args:
-  # Solo Wayland: sin red, sin acceso a carpetas personales (los fondos van en la carpeta de la app).
+  # Sin red ni acceso a carpetas personales (los fondos van en la carpeta de la app).
   - --socket=wayland
+  # KDE: pasarle los cuadros a Plasma (org.kde.PlasmaShell.evaluateScript) e instalar el
+  # complemento de fondo; solo esa carpeta de Plasma, nada más de ~/.local/share.
+  - --talk-name=org.kde.plasmashell
+  - --filesystem=xdg-data/plasma/wallpapers:create
 build-options:
   append-path: /usr/lib/sdk/rust-stable/bin
   env:

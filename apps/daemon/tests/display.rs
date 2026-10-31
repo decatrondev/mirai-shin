@@ -302,12 +302,12 @@ async fn sin_superficie_se_guarda_igual() {
         endpoint: ep.clone(),
         init_logging: false,
         console_logs: false,
-        surface: Some(Box::new(|_| Err("kde_plasma_pending".into()))),
+        surface: Some(Box::new(|_| Err("kde_plugin_needs_restart".into()))),
     };
     let task = tokio::spawn(async move { run(config).await.unwrap() });
     let mut c = connect(&ep).await;
     let status = c.call(methods::STATUS, Value::Null).await.unwrap();
-    assert_eq!(status["surface"], json!("kde_plasma_pending"));
+    assert_eq!(status["surface"], json!("kde_plugin_needs_restart"));
     assert_eq!(status["surface_available"], json!(false));
     // Un monitor que no se puede comprobar se acepta: se verá cuando haya superficie.
     let r = c

@@ -12,4 +12,4 @@ pub mod pixels;
 mod wayland;
 
 #[cfg(target_os = "linux")]
-pub use wayland::{ConnectError, WaylandSurface};
+pub use wayland::{ConnectError, OutputWatcher, WaylandSurface};

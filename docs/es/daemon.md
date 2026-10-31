@@ -1,6 +1,6 @@
 # Daemon y `miraishin-ctl`
 
-> En desarrollo: el daemon muestra imágenes fijas en Sway y Hyprland (Wayland con `wlr-layer-shell`). KDE Plasma, Windows, video, X11 y GNOME llegan en próximas versiones.
+> En desarrollo: el daemon muestra imágenes fijas en KDE Plasma (con su propio complemento de fondo de Plasma), Sway y Hyprland (Wayland con `wlr-layer-shell`). Windows, video, X11 y GNOME llegan en próximas versiones.
 
 ## Daemon
 
@@ -31,7 +31,9 @@ Herramienta de consola para hablar con el daemon. Se entrega con la app, para di
 
 La carpeta es la que muestra `list`; el nombre del monitor, el que muestra `outputs`. Un monitor nuevo recibe el fondo elegido para todos. Si una imagen no se puede leer, ese monitor muestra un color grafito y `outputs` muestra el código del problema.
 
-Donde todavía no se puede mostrar el fondo (por ahora KDE Plasma, X11 y GNOME), `set` guarda igual lo elegido y `status` explica por qué; no es un error.
+Donde todavía no se puede mostrar el fondo (X11 y GNOME), `set` guarda igual lo elegido y `status` explica por qué; no es un error.
+
+En KDE Plasma el daemon instala su complemento de fondo en `~/.local/share/plasma/wallpapers/` y cambia cada pantalla a ese tipo de fondo; `clear` le devuelve a la pantalla el tipo de fondo que tenía antes. La primera vez, Plasma puede necesitar reiniciarse (cerrar sesión y volver a entrar) para ver el complemento: `status` lo avisa.
 
 Con `--json` muestra la respuesta del daemon tal cual. Códigos de salida: `0` bien, `1` error, `2` el daemon no está corriendo (no es una falla). Los textos salen en el idioma de los ajustes o, si es `system`, en el de `LANG`.
 

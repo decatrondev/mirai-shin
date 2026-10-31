@@ -1,0 +1,21 @@
+[package]
+name = "miraishin-surface-plasma"
+description = "Fondo en KDE Plasma: complemento de fondo propio al que el daemon le pasa cada cuadro por D-Bus"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+miraishin-core = { workspace = true }
+miraishin-brand = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+miraishin-surface-wayland = { workspace = true }
+zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }

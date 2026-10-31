@@ -1,6 +1,6 @@
 # Daemon and `miraishin-ctl`
 
-> In development: the daemon shows still images on Sway and Hyprland (Wayland with `wlr-layer-shell`). KDE Plasma, Windows, video, X11 and GNOME come in upcoming versions.
+> In development: the daemon shows still images on KDE Plasma (through its own Plasma wallpaper add-on), Sway and Hyprland (Wayland with `wlr-layer-shell`). Windows, video, X11 and GNOME come in upcoming versions.
 
 ## Daemon
 
@@ -31,7 +31,9 @@ A console tool to talk to the daemon, shipped with the app for diagnostics and s
 
 The folder is the one shown by `list`; the monitor name, the one shown by `outputs`. A new monitor gets the wallpaper chosen for all. If an image cannot be read, that monitor shows a solid graphite color and `outputs` shows the problem code.
 
-Where the wallpaper cannot be shown yet (KDE Plasma for now, X11, GNOME), `set` still saves the choice and `status` explains why; it is not an error.
+Where the wallpaper cannot be shown yet (X11, GNOME), `set` still saves the choice and `status` explains why; it is not an error.
+
+On KDE Plasma the daemon installs its wallpaper add-on in `~/.local/share/plasma/wallpapers/` and switches each screen to it; `clear` gives the screen back the wallpaper type it had before. The first time, Plasma may need a restart (log out and back in) to see the add-on: `status` says so.
 
 Add `--json` to print the daemon's raw answer. Exit codes: `0` ok, `1` error, `2` the daemon is not running (not a failure). The texts follow the language in the settings or, if it is `system`, `LANG`.
 

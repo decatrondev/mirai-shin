@@ -288,7 +288,9 @@ fn print_surface(lang: Language, surface: &str, available: bool) {
         return;
     }
     let key = match surface {
-        "kde_plasma_pending" => "surface_kde_pending",
+        "kde_plugin_needs_restart" => "surface_kde_restart",
+        "kde_plasma_unavailable" => "surface_kde_unavailable",
+        "kde_plugin_install_failed" => "surface_kde_install_failed",
         "no_wayland" => "surface_no_wayland",
         "no_layer_shell" => "surface_no_layer_shell",
         "platform_pending" => "surface_platform_pending",

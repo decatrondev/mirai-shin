@@ -126,7 +126,9 @@ pub async fn run(config: RunConfig) -> Result<(), RunError> {
     let shutdown = Arc::new(Notify::new());
     let library = Arc::new(Mutex::new(library));
     let screen = Display::start(
-        config.surface.unwrap_or_else(display::auto_surface),
+        config
+            .surface
+            .unwrap_or_else(|| display::auto_surface(config.paths.data_dir.clone())),
         library.clone(),
         wallpapers_dir.clone(),
         events_tx.clone(),

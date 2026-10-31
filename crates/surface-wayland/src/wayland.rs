@@ -93,6 +93,10 @@ impl WaylandSurface {
     /// Se conecta al compositor, espera a conocer los monitores y arranca el hilo.
     /// `events` recibe los cambios de monitores que pasen después.
     pub fn connect(events: EventSink) -> Result<Self, ConnectError> {
+        Self::start(events, true)
+    }
+
+    fn start(events: EventSink, backgrounds: bool) -> Result<Self, ConnectError> {
         let shared = Arc::new(Mutex::new(Shared {
             outputs: Vec::new(),
             alive: true,
@@ -102,7 +106,7 @@ impl WaylandSurface {
         let thread_shared = shared.clone();
         let thread = std::thread::Builder::new()
             .name("surface-wayland".into())
-            .spawn(move || run(rx, thread_shared, events, ready_tx))
+            .spawn(move || run(rx, thread_shared, events, ready_tx, backgrounds))
             .map_err(|_| ConnectError::Unavailable)?;
         match ready_rx.recv() {
             Ok(Ok(())) => Ok(Self {
@@ -135,6 +139,20 @@ impl WaylandSurface {
             .find(|o| o.name == name)
             .cloned()
             .ok_or(SurfaceError::UnknownOutput)
+    }
+}
+
+/// Solo la lista de monitores y sus avisos, sin poner nada en pantalla. La usa KDE, donde
+/// el fondo lo dibuja Plasma pero los monitores se conocen por Wayland igual.
+pub struct OutputWatcher(WaylandSurface);
+
+impl OutputWatcher {
+    pub fn connect(events: EventSink) -> Result<Self, ConnectError> {
+        WaylandSurface::start(events, false).map(Self)
+    }
+
+    pub fn outputs(&self) -> Vec<OutputInfo> {
+        self.0.outputs()
     }
 }
 
@@ -206,7 +224,8 @@ struct State {
     registry: RegistryState,
     output_state: OutputState,
     compositor: CompositorState,
-    layer_shell: LayerShell,
+    /// `None` en `OutputWatcher`: no se crean superficies.
+    layer_shell: Option<LayerShell>,
     shm: Shm,
     viewporter: Option<wp_viewporter::WpViewporter>,
     qh: QueueHandle<State>,
@@ -224,6 +243,7 @@ fn run(
     shared: Arc<Mutex<Shared>>,
     events: EventSink,
     ready: mpsc::Sender<Result<(), ConnectError>>,
+    backgrounds: bool,
 ) {
     let fail = |e| {
         let _ = ready.send(Err(e));
@@ -238,8 +258,13 @@ fn run(
     let Ok(compositor) = CompositorState::bind(&globals, &qh) else {
         return fail(ConnectError::Unavailable);
     };
-    let Ok(layer_shell) = LayerShell::bind(&globals, &qh) else {
-        return fail(ConnectError::NoLayerShell);
+    let layer_shell = if backgrounds {
+        let Ok(l) = LayerShell::bind(&globals, &qh) else {
+            return fail(ConnectError::NoLayerShell);
+        };
+        Some(l)
+    } else {
+        None
     };
     let Ok(shm) = Shm::bind(&globals, &qh) else {
         return fail(ConnectError::Unavailable);
@@ -356,7 +381,9 @@ impl State {
             return;
         };
         if self.outputs[i].background.is_none() {
-            let bg = self.create_background(&self.outputs[i].wl.clone());
+            let Some(bg) = self.create_background(&self.outputs[i].wl.clone()) else {
+                return;
+            };
             self.outputs[i].background = Some(bg);
         }
         let viewporter = self.viewporter.is_some();
@@ -376,14 +403,15 @@ impl State {
         }
     }
 
-    fn create_background(&self, wl: &wl_output::WlOutput) -> Background {
+    fn create_background(&self, wl: &wl_output::WlOutput) -> Option<Background> {
+        let layer_shell = self.layer_shell.as_ref()?;
         let qh = self.qh.clone();
         let surface = self.compositor.create_surface(&qh);
         let viewport = self
             .viewporter
             .as_ref()
             .map(|v| v.get_viewport(&surface, &qh, NoEvents));
-        let layer = self.layer_shell.create_layer_surface(
+        let layer = layer_shell.create_layer_surface(
             &qh,
             surface,
             Layer::Background,
@@ -401,13 +429,13 @@ impl State {
                 .set_input_region(Some(region.wl_region()));
         }
         layer.commit();
-        Background {
+        Some(Background {
             layer,
             viewport,
             configured: Size::new(0, 0),
             pending: None,
             shown: None,
-        }
+        })
     }
 }
 

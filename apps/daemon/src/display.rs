@@ -68,6 +68,7 @@ impl Display {
             wallpapers_dir,
             events,
             shown: HashMap::new(),
+            first: true,
         };
         let started = std::thread::Builder::new()
             .name("display".into())
@@ -132,6 +133,9 @@ struct Worker {
     wallpapers_dir: PathBuf,
     events: broadcast::Sender<Event>,
     shown: HashMap<String, Shown>,
+    /// En la primera pasada se quita el fondo de los monitores sin nada elegido: en KDE el
+    /// de una sesión anterior sigue puesto aunque el daemon se haya reiniciado.
+    first: bool,
 }
 
 impl Worker {
@@ -182,7 +186,7 @@ impl Worker {
 
         for output in &outputs {
             let Some((folder, mode)) = resolve(&assignments, &output.name) else {
-                if self.shown.remove(&output.name).is_some() {
+                if self.shown.remove(&output.name).is_some() || self.first {
                     let _ = surface.clear(&output.name);
                     changed = true;
                 }
@@ -242,6 +246,7 @@ impl Worker {
         }
         // Lo decodificado se suelta aquí: solo quedan los cuadros en la superficie.
         drop(decoded);
+        self.first = false;
         let present: Vec<&str> = outputs.iter().map(|o| o.name.as_str()).collect();
         self.shown
             .retain(|name, _| present.contains(&name.as_str()));
@@ -322,16 +327,20 @@ fn lookup(
 }
 
 /// La superficie de este escritorio, si hay. Los códigos los explica `ctl` (fase 1.6).
-pub fn auto_surface() -> SurfaceFactory {
-    Box::new(|sink| {
+/// `data_dir`: carpeta de datos de la app (en KDE ahí van los cuadros que lee Plasma).
+pub fn auto_surface(data_dir: PathBuf) -> SurfaceFactory {
+    Box::new(move |sink| {
         #[cfg(target_os = "linux")]
         {
             let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
             // En KDE, layer-shell tapa los íconos (prueba del 2026-10-30): ahí el fondo va por
-            // el complemento de Plasma (fase 1.1c), todavía no conectado.
+            // el complemento de Plasma.
             if desktop.split(':').any(|d| d.eq_ignore_ascii_case("KDE")) {
-                drop(sink);
-                return Err("kde_plasma_pending".into());
+                return miraishin_surface_plasma::PlasmaSurface::connect(
+                    sink,
+                    data_dir.join("plasma"),
+                )
+                .map(|s| (Box::new(s) as Box<dyn Surface>, "plasma"));
             }
             miraishin_surface_wayland::WaylandSurface::connect(sink)
                 .map(|s| (Box::new(s) as Box<dyn Surface>, "layer_shell"))
@@ -339,7 +348,7 @@ pub fn auto_surface() -> SurfaceFactory {
         }
         #[cfg(not(target_os = "linux"))]
         {
-            drop(sink);
+            drop((sink, data_dir));
             Err("platform_pending".into())
         }
     })

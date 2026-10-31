@@ -27,6 +27,7 @@ anyhow = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 miraishin-surface-wayland = { workspace = true }
+miraishin-surface-plasma = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
