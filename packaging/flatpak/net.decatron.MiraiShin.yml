@@ -1,0 +1,43 @@
+# Flatpak de DESARROLLO (fase 1): daemon, ctl y la prueba de capa de fondo.
+# Para Flathub (fase 6) se cambia la compilación con red por fuentes fijas (cargo-sources.json).
+id: net.decatron.MiraiShin
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: miraishin-daemon
+finish-args:
+  # Solo Wayland: sin red, sin acceso a carpetas personales (los fondos van en la carpeta de la app).
+  - --socket=wayland
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    CARGO_HOME: /run/build/miraishin/cargo
+modules:
+  - name: miraishin
+    buildsystem: simple
+    build-options:
+      # Solo en desarrollo: deja a cargo bajar las dependencias.
+      build-args:
+        - --share=network
+    build-commands:
+      - cargo build --release --locked -p miraishin-daemon -p miraishin-ctl -p miraishin-layer-probe
+      - install -Dm755 target/release/miraishin-daemon -t /app/bin
+      - install -Dm755 target/release/miraishin-ctl -t /app/bin
+      - install -Dm755 target/release/miraishin-layer-probe -t /app/bin
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - target
+          - node_modules
+          - .git
+          - .dev
+          - preview
+          # Secretos del panel: nunca dentro de un paquete.
+          - services/web/.env
+          - apps/landing
+          - packaging/flatpak/build
+          - packaging/flatpak/repo
+          - packaging/flatpak/.flatpak-builder

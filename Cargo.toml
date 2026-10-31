@@ -9,6 +9,7 @@ members = [
     "crates/license",
     "apps/daemon",
     "apps/ctl",
+    "tools/layer-probe",
     "services/web",
 ]
 

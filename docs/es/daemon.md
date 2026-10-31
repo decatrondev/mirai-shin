@@ -35,7 +35,7 @@ Con `--json` muestra la respuesta del daemon tal cual. Códigos de salida: `0` b
 | Biblioteca | `~/.local/share/net.decatron.MiraiShin/library.db` | `%APPDATA%\net.decatron.MiraiShin\library.db` |
 | Respaldos antes de migrar (los 5 últimos) | `…/backups/` | `…\backups\` |
 | Logs (uno por día, los 7 últimos) | `…/logs/` | `…\logs\` |
-| IPC | `$XDG_RUNTIME_DIR/net.decatron.MiraiShin/daemon.sock` (solo tu usuario) | named pipe `\\.\pipe\net.decatron.MiraiShin-<usuario>` |
+| IPC | `$XDG_RUNTIME_DIR/app/net.decatron.MiraiShin/daemon.sock` (solo tu usuario) | named pipe `\\.\pipe\net.decatron.MiraiShin-<usuario>` |
 
 La biblioteca es solo un índice: la verdad son las carpetas de fondos. Si el archivo de la biblioteca se daña, se aparta como `library.db.danada-<fecha>` y se reconstruye desde las carpetas.
 

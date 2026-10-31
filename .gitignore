@@ -22,3 +22,9 @@ dist/
 Thumbs.db
 .idea/
 .vscode/
+
+# Flatpak (salidas de compilación)
+/packaging/flatpak/build/
+/packaging/flatpak/repo/
+/packaging/flatpak/.flatpak-builder/
+*.flatpak

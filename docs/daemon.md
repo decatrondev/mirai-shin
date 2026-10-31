@@ -35,7 +35,7 @@ Add `--json` to print the daemon's raw answer. Exit codes: `0` ok, `1` error, `2
 | Library | `~/.local/share/net.decatron.MiraiShin/library.db` | `%APPDATA%\net.decatron.MiraiShin\library.db` |
 | Backups before migrating (last 5) | `…/backups/` | `…\backups\` |
 | Logs (one per day, last 7) | `…/logs/` | `…\logs\` |
-| IPC | `$XDG_RUNTIME_DIR/net.decatron.MiraiShin/daemon.sock` (only your user) | named pipe `\\.\pipe\net.decatron.MiraiShin-<user>` |
+| IPC | `$XDG_RUNTIME_DIR/app/net.decatron.MiraiShin/daemon.sock` (only your user) | named pipe `\\.\pipe\net.decatron.MiraiShin-<user>` |
 
 The library is only an index: the wallpaper folders are the truth. If the library file gets damaged, it is set aside as `library.db.danada-<date>` and rebuilt from the folders.
 

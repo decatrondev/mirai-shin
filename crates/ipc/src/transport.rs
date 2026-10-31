@@ -23,13 +23,16 @@ impl Endpoint {
         let app = &miraishin_brand::get().app_id;
         #[cfg(unix)]
         {
-            // XDG_RUNTIME_DIR (dentro de Flatpak, el de la sandbox). Si no hay, la caché del usuario.
+            // `$XDG_RUNTIME_DIR/app/<id>/`: dentro de Flatpak es la única carpeta de ejecución que
+            // comparten todos los procesos de la app (cada `flatpak run` tiene la suya privada), y
+            // fuera de Flatpak es la misma ruta real, así que la app y el daemon se encuentran
+            // estén o no en la sandbox. Si no hay XDG_RUNTIME_DIR, la caché del usuario.
             let base = dirs::runtime_dir()
                 .or_else(dirs::cache_dir)
                 .ok_or_else(|| {
                     io::Error::new(io::ErrorKind::NotFound, "sin carpeta de ejecución")
                 })?;
-            Ok(Self::Unix(base.join(app).join("daemon.sock")))
+            Ok(Self::Unix(base.join("app").join(app).join("daemon.sock")))
         }
         #[cfg(windows)]
         {

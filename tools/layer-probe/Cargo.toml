@@ -1,0 +1,15 @@
+[package]
+name = "miraishin-layer-probe"
+description = "Prueba mínima (fase 1.1): color sólido en la capa background de wlr-layer-shell en cada monitor. No se distribuye"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "miraishin-layer-probe"
+path = "src/main.rs"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+smithay-client-toolkit = { version = "0.21", default-features = false }
