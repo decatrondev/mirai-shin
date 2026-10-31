@@ -180,7 +180,7 @@ mod probe {
             let base = self.color;
             let darker = darken(base);
             let stripe = (40 * s.scale) as usize;
-            for (i, px) in canvas.chunks_exact_mut(4).enumerate() {
+            for (i, px) in canvas.as_chunks_mut::<4>().0.iter_mut().enumerate() {
                 let (x, y) = (i % w as usize, i / w as usize);
                 let c = if ((x + y) / stripe).is_multiple_of(2) {
                     base
