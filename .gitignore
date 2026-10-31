@@ -28,3 +28,6 @@ Thumbs.db
 /packaging/flatpak/repo/
 /packaging/flatpak/.flatpak-builder/
 *.flatpak
+
+# Videos de prueba generados (tools/kde-video-probe/make-videos.sh)
+/tools/kde-video-probe/contents/videos/
