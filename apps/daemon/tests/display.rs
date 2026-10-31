@@ -144,8 +144,11 @@ fn start(paths: &Paths, ep: &Endpoint, screen: &Shared) -> tokio::task::JoinHand
     })
 }
 
-async fn stop(c: &mut Client, task: tokio::task::JoinHandle<()>) {
+async fn stop(mut c: Client, task: tokio::task::JoinHandle<()>) {
     c.call(methods::SHUTDOWN, Value::Null).await.unwrap();
+    // En Windows el nombre del pipe sigue tomado mientras un cliente lo tenga abierto: un
+    // daemon nuevo daría `AlreadyRunning`. Se cierra antes de esperar al viejo.
+    drop(c);
     tokio::time::timeout(Duration::from_secs(5), task)
         .await
         .unwrap()
@@ -263,7 +266,7 @@ async fn fondos_por_monitor() {
     let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
     assert_eq!(list["items"][0]["problem"], json!("wallpaper_invalid"));
 
-    stop(&mut c, task).await;
+    stop(c, task).await;
 }
 
 #[tokio::test]
@@ -282,13 +285,13 @@ async fn lo_elegido_se_restaura_al_arrancar() {
     c.call(methods::WALLPAPER_SET, json!({"folder": "azul"}))
         .await
         .unwrap();
-    stop(&mut c, task).await;
+    stop(c, task).await;
 
     screen.lock().unwrap().frames.clear();
     let task = start(&paths, &ep, &screen);
-    let mut c = connect(&ep).await;
+    let c = connect(&ep).await;
     wait_for(|| color(&screen, "DP-1") == Some(BLUE)).await;
-    stop(&mut c, task).await;
+    stop(c, task).await;
 }
 
 #[tokio::test]
@@ -319,5 +322,5 @@ async fn sin_superficie_se_guarda_igual() {
         .unwrap();
     assert_eq!(r["surface_available"], json!(false));
     assert_eq!(r["items"], json!([]));
-    stop(&mut c, task).await;
+    stop(c, task).await;
 }
