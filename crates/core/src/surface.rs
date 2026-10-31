@@ -161,6 +161,9 @@ pub enum SurfaceError {
     Disconnected,
     /// Esta superficie todavía no reproduce video (fase 2): el daemon pone el respaldo.
     VideoUnsupported,
+    /// El video no se pudo reproducir; el código dice por qué (`mpv_unavailable`,
+    /// `video_no_gpu`, `video_no_decoder`, `video_unplayable`, `video_gl_failed`).
+    Video(&'static str),
 }
 
 impl SurfaceError {
@@ -171,6 +174,7 @@ impl SurfaceError {
             Self::SizeMismatch => "size_mismatch",
             Self::Disconnected => "disconnected",
             Self::VideoUnsupported => "video_unsupported",
+            Self::Video(code) => code,
         }
     }
 }

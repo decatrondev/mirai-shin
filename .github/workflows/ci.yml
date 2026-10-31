@@ -35,6 +35,11 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      # libmpv para la prueba de video (render-video la carga al arrancar; no hace falta para
+      # compilar). En Windows el video llega al final de la fase 2.
+      - name: libmpv
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libmpv2
       - run: cargo fmt --all --check
       # miraishin-web es el servidor del panel de la landing: solo corre en Linux.
       - name: Clippy

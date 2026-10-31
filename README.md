@@ -28,6 +28,7 @@ crates/surface-wayland/  wallpaper on Sway/Hyprland (wlr-layer-shell)
 crates/surface-plasma/   wallpaper on KDE Plasma (own wallpaper add-on)
 crates/surface-windows/  wallpaper on Windows (window behind the desktop icons)
 crates/render-image/     still image: decode and fit to each monitor
+crates/render-video/     video with libmpv (loaded at start; LGPL build)
 crates/store/       local library (SQLite), settings (TOML), paths
 crates/ipc/         app <-> daemon protocol (Unix socket / named pipe)
 crates/logging/     log files with daily rotation

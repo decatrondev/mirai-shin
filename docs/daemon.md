@@ -1,6 +1,6 @@
 # Daemon and `miraishin-ctl`
 
-> In development: the daemon shows still images on KDE Plasma (through its own Plasma wallpaper add-on), Sway and Hyprland (Wayland with `wlr-layer-shell`), and on Windows (being tested). Videos play on KDE Plasma (being tested); on Sway, Hyprland and Windows they come next. X11 and GNOME come in upcoming versions.
+> In development: the daemon shows still images on KDE Plasma (through its own Plasma wallpaper add-on), Sway and Hyprland (Wayland with `wlr-layer-shell`), and on Windows (being tested). Videos play on KDE Plasma and on Sway and Hyprland (being tested); on Windows they come next. X11 and GNOME come in upcoming versions.
 
 ## Daemon
 
@@ -32,6 +32,8 @@ A console tool to talk to the daemon, shipped with the app for diagnostics and s
 The folder is the one shown by `list`; the monitor name, the one shown by `outputs`. A new monitor gets the wallpaper chosen for all. If an image cannot be read, that monitor shows a solid graphite color and `outputs` shows the problem code.
 
 A video wallpaper loops without sound and uses the same modes. Where videos are not available yet, the monitor shows the graphite color and `outputs` says so (`video_unsupported`, not an error); if the video file is missing, the code is `video_unreadable`.
+
+On Sway and Hyprland videos are played by libmpv (the Flatpak includes it; elsewhere install your distribution's `mpv` package) and drawn with the graphics card through EGL. Monitors showing the same video with the same mode share one player, so the video is decoded once. Codes: `mpv_unavailable` (libmpv missing), `video_no_gpu` (EGL not available), `video_no_decoder` (format or codec not available, try WebM), `video_unplayable` (damaged file or not a video). `MIRAISHIN_MPV_LOG=v` sends mpv's detailed messages to the log, for diagnosis.
 
 Where the wallpaper cannot be shown yet (X11, GNOME), `set` still saves the choice and `status` explains why; it is not an error.
 

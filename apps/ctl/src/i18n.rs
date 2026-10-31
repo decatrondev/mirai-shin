@@ -52,9 +52,29 @@ const TEXTS: &[(&str, &str, &str)] = &[
     ("outputs_all", "Para todos: {} [{}]", "For all: {} [{}]"),
     ("outputs_showing", "fondo: {} [{}]", "wallpaper: {} [{}]"),
     ("outputs_problem", "no se pudo mostrar {} ({}); se ve el color de respaldo", "could not show {} ({}); showing the fallback color"),
-    ("outputs_video_pending",
+    // Problemas de un monitor: «problem_<código>». Si un código no tiene texto propio se usa
+    // «outputs_problem».
+    ("problem_video_unsupported",
      "{} es un video, y en este escritorio los videos llegan en una próxima versión. No es un error: mientras tanto se ve el color de respaldo",
      "{} is a video, and videos on this desktop come in an upcoming version. This is not an error: the fallback color shows meanwhile"),
+    ("problem_mpv_unavailable",
+     "{} es un video y este sistema no tiene libmpv, que hace falta para reproducirlo. No es un error: instala el paquete «mpv» de tu distribución (la versión Flatpak ya la trae). Mientras tanto se ve el color de respaldo",
+     "{} is a video and this system does not have libmpv, which is needed to play it. This is not an error: install your distribution's \"mpv\" package (the Flatpak version already includes it). The fallback color shows meanwhile"),
+    ("problem_video_no_gpu",
+     "{}: no se pudo usar la tarjeta gráfica (EGL) para dibujar el video. Se ve el color de respaldo; las imágenes siguen funcionando",
+     "{}: the graphics card (EGL) could not be used to draw the video. The fallback color shows; images still work"),
+    ("problem_video_no_decoder",
+     "{}: este sistema no puede decodificar ese video (formato o códec no disponible). Prueba con otro formato, por ejemplo WebM. Se ve el color de respaldo",
+     "{}: this system cannot decode that video (format or codec not available). Try another format, for example WebM. The fallback color shows"),
+    ("problem_video_unplayable",
+     "{}: el video no se pudo abrir (archivo dañado o no es un video). Se ve el color de respaldo",
+     "{}: the video could not be opened (damaged file, or not a video). The fallback color shows"),
+    ("problem_video_unreadable",
+     "{}: no se encuentra el archivo del video. Si lo moviste o borraste, usa «rescan». Se ve el color de respaldo",
+     "{}: the video file is missing. If you moved or deleted it, run \"rescan\". The fallback color shows"),
+    ("problem_video_gl_failed",
+     "{}: el reproductor de video no pudo usar la tarjeta gráfica. Se ve el color de respaldo",
+     "{}: the video player could not use the graphics card. The fallback color shows"),
     ("outputs_empty", "sin fondo", "no wallpaper"),
     ("unknown_command", "Comando desconocido: {}", "Unknown command: {}"),
     ("not_running",
@@ -125,6 +145,23 @@ mod tests {
         keys.sort();
         keys.dedup();
         assert_eq!(keys.len(), TEXTS.len(), "clave repetida");
+    }
+
+    #[test]
+    fn cada_problema_de_video_tiene_explicacion() {
+        for code in [
+            "video_unsupported",
+            "mpv_unavailable",
+            "video_no_gpu",
+            "video_no_decoder",
+            "video_unplayable",
+            "video_unreadable",
+            "video_gl_failed",
+        ] {
+            let key = format!("problem_{code}");
+            assert!(!t(Language::Es, &key).is_empty(), "{key}");
+            assert_eq!(t(Language::En, &key).matches("{}").count(), 1, "{key}");
+        }
     }
 
     #[test]

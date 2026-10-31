@@ -1,6 +1,6 @@
 # Daemon y `miraishin-ctl`
 
-> En desarrollo: el daemon muestra imágenes fijas en KDE Plasma (con su propio complemento de fondo de Plasma), Sway y Hyprland (Wayland con `wlr-layer-shell`), y en Windows (en prueba). Los videos se reproducen en KDE Plasma (en prueba); en Sway, Hyprland y Windows llegan después. X11 y GNOME llegan en próximas versiones.
+> En desarrollo: el daemon muestra imágenes fijas en KDE Plasma (con su propio complemento de fondo de Plasma), Sway y Hyprland (Wayland con `wlr-layer-shell`), y en Windows (en prueba). Los videos se reproducen en KDE Plasma y en Sway y Hyprland (en prueba); en Windows llegan después. X11 y GNOME llegan en próximas versiones.
 
 ## Daemon
 
@@ -32,6 +32,8 @@ Herramienta de consola para hablar con el daemon. Se entrega con la app, para di
 La carpeta es la que muestra `list`; el nombre del monitor, el que muestra `outputs`. Un monitor nuevo recibe el fondo elegido para todos. Si una imagen no se puede leer, ese monitor muestra un color grafito y `outputs` muestra el código del problema.
 
 Un fondo de video se repite en bucle, sin sonido, y usa los mismos modos. Donde los videos todavía no están disponibles, el monitor muestra el color grafito y `outputs` lo explica (`video_unsupported`, no es un error); si falta el archivo del video, el código es `video_unreadable`.
+
+En Sway y Hyprland los videos los reproduce libmpv (el Flatpak la trae; fuera de él, instala el paquete `mpv` de tu distribución) y se dibujan con la tarjeta gráfica por EGL. Los monitores que muestran el mismo video con el mismo modo comparten un reproductor, así que el video se decodifica una sola vez. Códigos: `mpv_unavailable` (falta libmpv), `video_no_gpu` (EGL no disponible), `video_no_decoder` (formato o códec no disponible, prueba WebM), `video_unplayable` (archivo dañado o no es un video). `MIRAISHIN_MPV_LOG=v` manda los mensajes detallados de mpv al registro, para diagnóstico.
 
 Donde todavía no se puede mostrar el fondo (X11 y GNOME), `set` guarda igual lo elegido y `status` explica por qué; no es un error.
 

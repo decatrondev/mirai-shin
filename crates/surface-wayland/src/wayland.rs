@@ -1,26 +1,34 @@
 //! Hilo de Wayland y la manija (`WaylandSurface`) que cumple el contrato `Surface`.
 
+use std::collections::HashMap;
+use std::ffi::c_void;
+use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread::JoinHandle;
+use std::time::Duration;
 
+use khronos_egl as egl_api;
+use miraishin_core::fit::FitMode;
 use miraishin_core::surface::{
     check_frame, EventSink, Frame, OutputInfo, Size, Surface, SurfaceError, SurfaceEvent,
 };
+use miraishin_render_video::Player;
 use smithay_client_toolkit::{
-    compositor::{CompositorHandler, CompositorState, Region},
+    compositor::{CompositorHandler, CompositorState, FrameCallbackData, Region},
     delegate_registry,
     dispatch2::Dispatch2,
     output::{OutputHandler, OutputState},
     reexports::{
         calloop::{
             channel::{channel, Event as ChannelEvent, Sender},
+            ping::{make_ping, Ping},
             EventLoop,
         },
         calloop_wayland_source::WaylandSource,
         client::{
             globals::registry_queue_init,
             protocol::{wl_output, wl_shm, wl_surface},
-            Connection, QueueHandle,
+            Connection, Proxy, QueueHandle,
         },
         protocols::wp::viewporter::client::{wp_viewport, wp_viewporter},
     },
@@ -39,7 +47,11 @@ use smithay_client_toolkit::{
     },
 };
 
+use crate::egl::{self, Egl};
 use crate::pixels::{integer_buffer_scale, rgba_to_xrgb, scale_from_mode};
+
+/// Cuánto se espera a que mpv abra un video antes de responder al daemon.
+const VIDEO_LOAD_TIMEOUT: Duration = Duration::from_secs(8);
 
 /// Por qué no se pudo conectar. Códigos estables para `status` (fase 1.6).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,8 +82,11 @@ impl std::fmt::Display for ConnectError {
 
 impl std::error::Error for ConnectError {}
 
+type VideoReply = mpsc::Sender<Result<(), &'static str>>;
+
 enum Command {
     Show(String, Frame),
+    ShowVideo(String, PathBuf, FitMode, VideoReply),
     Clear(String),
     Shutdown,
 }
@@ -169,6 +184,27 @@ impl Surface for WaylandSurface {
         self.send(Command::Show(output.to_string(), frame))
     }
 
+    fn show_video(
+        &mut self,
+        output: &str,
+        video: &Path,
+        mode: FitMode,
+    ) -> Result<(), SurfaceError> {
+        self.output(output)?;
+        let (tx, rx) = mpsc::channel();
+        self.send(Command::ShowVideo(
+            output.to_string(),
+            video.to_path_buf(),
+            mode,
+            tx,
+        ))?;
+        match rx.recv_timeout(VIDEO_LOAD_TIMEOUT + Duration::from_secs(2)) {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(code)) => Err(SurfaceError::Video(code)),
+            Err(_) => Err(SurfaceError::Video("video_unplayable")),
+        }
+    }
+
     fn clear(&mut self, output: &str) -> Result<(), SurfaceError> {
         self.output(output)?;
         self.send(Command::Clear(output.to_string()))
@@ -198,6 +234,32 @@ struct Background {
     pending: Option<Frame>,
     /// Memoria del cuadro que se ve. Se suelta al cambiar de cuadro o al quitar el fondo.
     shown: Option<Shown>,
+    /// Video en esta superficie (en vez de `shown`).
+    video: Option<VideoTarget>,
+}
+
+/// Un video y su encuadre: los monitores con la misma clave comparten reproductor.
+type VideoKey = (PathBuf, FitMode);
+
+/// Superficie EGL de un monitor que muestra un video.
+struct VideoTarget {
+    key: VideoKey,
+    /// La superficie EGL va antes que la ventana de Wayland en que se apoya.
+    surface: egl_api::Surface,
+    window: wayland_egl::WlEglSurface,
+    /// Tamaño en píxeles de la ventana EGL.
+    pixels: Size,
+    /// Se pidió un aviso de cuadro y todavía no llegó: no se dibuja hasta entonces.
+    frame_pending: bool,
+    /// Hay un cuadro nuevo esperando ese aviso.
+    redraw: bool,
+}
+
+/// Un reproductor compartido y el contexto OpenGL en que dibuja.
+struct Slot {
+    player: Player,
+    context: egl_api::Context,
+    users: usize,
 }
 
 /// El buffer va primero: se destruye antes que la memoria que usa.
@@ -236,6 +298,13 @@ struct State {
     /// Los avisos se mandan solo después de la lista inicial.
     ready: bool,
     exit: bool,
+    /// Conexión de libwayland, para EGL.
+    wl_display: *mut c_void,
+    /// EGL se prepara al primer video: `None` = sin intentar, `Some(None)` = no hay.
+    egl: Option<Option<Egl>>,
+    players: HashMap<VideoKey, Slot>,
+    /// libmpv avisa por aquí (desde sus hilos) que hay eventos o un cuadro nuevo.
+    ping: Ping,
 }
 
 fn run(
@@ -250,6 +319,10 @@ fn run(
     };
     let Ok(conn) = Connection::connect_to_env() else {
         return fail(ConnectError::NoWayland);
+    };
+    let wl_display = conn.backend().display_ptr() as *mut c_void;
+    let Ok((ping, ping_source)) = make_ping() else {
+        return fail(ConnectError::Unavailable);
     };
     let Ok((globals, mut queue)) = registry_queue_init::<State>(&conn) else {
         return fail(ConnectError::NoWayland);
@@ -287,6 +360,10 @@ fn run(
         namespace: format!("{}-wallpaper", miraishin_brand::get().slug),
         ready: false,
         exit: false,
+        wl_display,
+        egl: None,
+        players: HashMap::new(),
+        ping,
     };
 
     // Dos idas y vueltas: la primera trae los monitores, la segunda sus datos completos.
@@ -308,10 +385,19 @@ fn run(
     }
     let inserted = handle.insert_source(commands, |event, _, state: &mut State| match event {
         ChannelEvent::Msg(Command::Show(name, frame)) => state.show(&name, frame),
+        ChannelEvent::Msg(Command::ShowVideo(name, path, mode, reply)) => {
+            let _ = reply.send(state.show_video(&name, path, mode));
+        }
         ChannelEvent::Msg(Command::Clear(name)) => state.clear(&name),
         ChannelEvent::Msg(Command::Shutdown) | ChannelEvent::Closed => state.exit = true,
     });
     if inserted.is_err() {
+        return fail(ConnectError::Unavailable);
+    }
+    if handle
+        .insert_source(ping_source, |_, _, state: &mut State| state.on_mpv())
+        .is_err()
+    {
         return fail(ConnectError::Unavailable);
     }
 
@@ -325,6 +411,11 @@ fn run(
         }
     }
     let shared = state.shared.clone();
+    // Los videos se sueltan con su contexto OpenGL activo, antes que EGL.
+    let names: Vec<String> = state.outputs.iter().map(|o| o.info.name.clone()).collect();
+    for name in names {
+        state.clear(&name);
+    }
     drop(state);
     if let Ok(mut s) = shared.lock() {
         s.alive = false;
@@ -388,18 +479,29 @@ impl State {
         }
         let viewporter = self.viewporter.is_some();
         let shm = &self.shm;
+        let mut old_video = None;
         if let Some(bg) = self.outputs[i].background.as_mut() {
             if bg.configured.is_empty() {
                 bg.pending = Some(frame);
             } else {
                 attach(bg, &frame, shm, viewporter);
             }
+            // La imagen ya está puesta: recién ahora se suelta el video (sin hueco).
+            old_video = bg.video.take();
+        }
+        if let Some(v) = old_video {
+            self.release_video(v);
         }
     }
 
     fn clear(&mut self, name: &str) {
-        if let Some(o) = self.outputs.iter_mut().find(|o| o.info.name == name) {
-            o.background = None;
+        let Some(o) = self.outputs.iter_mut().find(|o| o.info.name == name) else {
+            return;
+        };
+        let video = o.background.as_mut().and_then(|b| b.video.take());
+        o.background = None;
+        if let Some(v) = video {
+            self.release_video(v);
         }
     }
 
@@ -435,6 +537,7 @@ impl State {
             configured: Size::new(0, 0),
             pending: None,
             shown: None,
+            video: None,
         })
     }
 }
@@ -468,6 +571,273 @@ fn attach(bg: &mut Background, frame: &Frame, shm: &Shm, viewporter: bool) {
         _buffer: buffer,
         _pool: pool,
     });
+}
+
+// ---------------------------------------------------------------- video (fase 2.1)
+
+impl State {
+    /// EGL, preparado al primer video.
+    fn egl(&mut self) -> Option<&Egl> {
+        if self.egl.is_none() {
+            let e = Egl::new(self.wl_display);
+            if e.is_none() {
+                tracing::warn!("EGL is not available: videos cannot be drawn");
+            }
+            self.egl = Some(e);
+        }
+        self.egl.as_ref().and_then(|e| e.as_ref())
+    }
+
+    /// Pone un video en un monitor. Responde cuando mpv ya abrió el archivo (o falló).
+    fn show_video(&mut self, name: &str, path: PathBuf, mode: FitMode) -> Result<(), &'static str> {
+        let i = self
+            .outputs
+            .iter()
+            .position(|o| o.info.name == name)
+            .ok_or("unknown_output")?;
+        if self.egl().is_none() {
+            return Err("video_no_gpu");
+        }
+        tracing::debug!(output = name, "video: EGL ready");
+        let key: VideoKey = (path, mode);
+        if self.outputs[i]
+            .background
+            .as_ref()
+            .and_then(|b| b.video.as_ref())
+            .is_some_and(|v| v.key == key)
+        {
+            return Ok(());
+        }
+        if self.outputs[i].background.is_none() {
+            let bg = self
+                .create_background(&self.outputs[i].wl.clone())
+                .ok_or("video_no_gpu")?;
+            self.outputs[i].background = Some(bg);
+        }
+        let pixels = self.outputs[i].info.pixel_size();
+        let surface_id = match &self.outputs[i].background {
+            Some(bg) => bg.layer.wl_surface().id(),
+            None => return Err("video_no_gpu"),
+        };
+        let window = wayland_egl::WlEglSurface::new(
+            surface_id,
+            pixels.width.max(1) as i32,
+            pixels.height.max(1) as i32,
+        )
+        .map_err(|_| "video_no_gpu")?;
+        tracing::debug!("video: wl_egl_window created");
+        let egl = self
+            .egl
+            .as_ref()
+            .and_then(|e| e.as_ref())
+            .ok_or("video_no_gpu")?;
+        let surface = egl.create_surface(window.ptr()).ok_or("video_no_gpu")?;
+        tracing::debug!("video: EGL surface created");
+
+        // Reproductor: el mismo para todos los monitores con este video y encuadre.
+        if !self.players.contains_key(&key) {
+            match self.new_player(&key, surface) {
+                Ok(slot) => {
+                    self.players.insert(key.clone(), slot);
+                }
+                Err(code) => {
+                    if let Some(egl) = self.egl.as_ref().and_then(|e| e.as_ref()) {
+                        egl.destroy_surface(surface);
+                    }
+                    return Err(code);
+                }
+            }
+        }
+        if let Some(slot) = self.players.get_mut(&key) {
+            slot.users += 1;
+        }
+        let target = VideoTarget {
+            key,
+            surface,
+            window,
+            pixels,
+            frame_pending: false,
+            redraw: true,
+        };
+        let old = self.outputs[i].background.as_mut().and_then(|bg| {
+            bg.pending = None;
+            bg.video.replace(target)
+        });
+        if let Some(old) = old {
+            self.release_video(old);
+        }
+        self.render_output(i);
+        Ok(())
+    }
+
+    fn new_player(&self, key: &VideoKey, surface: egl_api::Surface) -> Result<Slot, &'static str> {
+        let egl = self
+            .egl
+            .as_ref()
+            .and_then(|e| e.as_ref())
+            .ok_or("video_no_gpu")?;
+        let context = egl.create_context().ok_or("video_no_gpu")?;
+        let fail = |code: &'static str| {
+            egl.destroy_context(context);
+            Err(code)
+        };
+        if !egl.make_current(Some(surface), context) {
+            return fail("video_no_gpu");
+        }
+        tracing::debug!("video: context current");
+        let ping = self.ping.clone();
+        let mut player = match Player::new(key.1, Box::new(move || ping.ping())) {
+            Ok(p) => p,
+            Err(e) => return fail(e.as_str()),
+        };
+        tracing::debug!("video: mpv started");
+        // SAFETY: el contexto de este reproductor está activo en este hilo, y lo estará en
+        // cada dibujo (`render_output`) y al cerrarlo (`release_video`).
+        if let Err(e) = unsafe { player.attach_gl(egl::get_proc_address) } {
+            drop(player);
+            return fail(e.as_str());
+        }
+        tracing::debug!("video: mpv render context ready");
+        if let Err(e) = player.load(&key.0, VIDEO_LOAD_TIMEOUT) {
+            drop(player);
+            return fail(e.as_str());
+        }
+        Ok(Slot {
+            player,
+            context,
+            users: 0,
+        })
+    }
+
+    /// Quita un video de una superficie; el reproductor se cierra si nadie más lo usa.
+    fn release_video(&mut self, target: VideoTarget) {
+        let Some(egl) = self.egl.as_ref().and_then(|e| e.as_ref()) else {
+            return;
+        };
+        let VideoTarget {
+            key,
+            surface,
+            window,
+            ..
+        } = target;
+        let last = match self.players.get_mut(&key) {
+            Some(slot) => {
+                slot.users = slot.users.saturating_sub(1);
+                slot.users == 0
+            }
+            None => false,
+        };
+        if last {
+            if let Some(slot) = self.players.remove(&key) {
+                // El reproductor se cierra con su contexto activo.
+                egl.make_current(Some(surface), slot.context);
+                drop(slot.player);
+                egl.destroy_context(slot.context);
+            }
+        }
+        egl.destroy_surface(surface);
+        drop(window);
+    }
+
+    /// libmpv avisó: eventos y cuadros nuevos.
+    fn on_mpv(&mut self) {
+        let keys: Vec<VideoKey> = self.players.keys().cloned().collect();
+        for key in keys {
+            let Some(slot) = self.players.get(&key) else {
+                continue;
+            };
+            if let Some(code) = slot.player.drain_events() {
+                tracing::warn!(code, "video stopped");
+            }
+            if !slot.player.needs_frame() {
+                continue;
+            }
+            for i in 0..self.outputs.len() {
+                let pending = match self.outputs[i]
+                    .background
+                    .as_mut()
+                    .and_then(|b| b.video.as_mut())
+                {
+                    Some(v) if v.key == key => {
+                        v.redraw = true;
+                        v.frame_pending
+                    }
+                    _ => continue,
+                };
+                if !pending {
+                    self.render_output(i);
+                }
+            }
+        }
+    }
+
+    /// Dibuja el cuadro actual del video de un monitor y pide el próximo aviso de cuadro.
+    fn render_output(&mut self, i: usize) {
+        let qh = self.qh.clone();
+        let Some(egl) = self.egl.as_ref().and_then(|e| e.as_ref()) else {
+            return;
+        };
+        let Some(bg) = self.outputs[i].background.as_mut() else {
+            return;
+        };
+        // Antes del primer `configure` no se puede poner nada en la superficie.
+        if bg.configured.is_empty() {
+            return;
+        }
+        let Some(v) = bg.video.as_mut() else {
+            return;
+        };
+        let Some(slot) = self.players.get(&v.key) else {
+            return;
+        };
+        if !egl.make_current(Some(v.surface), slot.context) {
+            return;
+        }
+        // SAFETY: el contexto del reproductor está activo con la superficie de este monitor.
+        unsafe {
+            slot.player
+                .render(v.pixels.width as i32, v.pixels.height as i32)
+        };
+        let surface = bg.layer.wl_surface();
+        surface.frame(&qh, FrameCallbackData(surface.clone()));
+        if egl.swap(v.surface) {
+            slot.player.report_swap();
+            v.frame_pending = true;
+            v.redraw = false;
+            // El primer cuadro del video ya está puesto: se suelta la imagen anterior.
+            bg.shown = None;
+        }
+    }
+
+    /// Ajusta la ventana EGL de un monitor a su tamaño en píxeles y su tamaño lógico.
+    fn resize_video(&mut self, i: usize) {
+        let pixels = self.outputs[i].info.pixel_size();
+        let viewporter = self.viewporter.is_some();
+        let Some(bg) = self.outputs[i].background.as_mut() else {
+            return;
+        };
+        let configured = bg.configured;
+        let Some(v) = bg.video.as_mut() else {
+            return;
+        };
+        if v.pixels != pixels {
+            v.window
+                .resize(pixels.width as i32, pixels.height as i32, 0, 0);
+            v.pixels = pixels;
+        }
+        let surface = bg.layer.wl_surface();
+        match (&bg.viewport, viewporter) {
+            (Some(vp), true) => {
+                surface.set_buffer_scale(1);
+                vp.set_destination(configured.width as i32, configured.height as i32);
+            }
+            _ => surface.set_buffer_scale(integer_buffer_scale(pixels, configured)),
+        }
+        v.redraw = true;
+        // Un aviso de cuadro pedido antes de este cambio podría no llegar: se dibuja ya.
+        v.frame_pending = false;
+        self.render_output(i);
+    }
 }
 
 // ---------------------------------------------------------------- eventos de Wayland
@@ -510,7 +880,10 @@ impl OutputHandler for State {
         let Some(i) = self.outputs.iter().position(|o| o.wl == wl) else {
             return;
         };
-        let gone = self.outputs.remove(i);
+        let mut gone = self.outputs.remove(i);
+        if let Some(v) = gone.background.as_mut().and_then(|b| b.video.take()) {
+            self.release_video(v);
+        }
         self.publish();
         self.emit(SurfaceEvent::OutputRemoved {
             name: gone.info.name,
@@ -533,10 +906,17 @@ impl State {
 impl LayerShellHandler for State {
     fn closed(&mut self, _: &Connection, _: &QueueHandle<Self>, layer: &LayerSurface) {
         // El compositor cerró la superficie (por ejemplo, el monitor se apagó): se olvida.
+        let mut videos = Vec::new();
         for o in &mut self.outputs {
             if o.background.as_ref().is_some_and(|b| &b.layer == layer) {
+                if let Some(v) = o.background.as_mut().and_then(|b| b.video.take()) {
+                    videos.push(v);
+                }
                 o.background = None;
             }
+        }
+        for v in videos {
+            self.release_video(v);
         }
     }
 
@@ -549,12 +929,10 @@ impl LayerShellHandler for State {
         _: u32,
     ) {
         let viewporter = self.viewporter.is_some();
-        let shm = &self.shm;
-        let Some(bg) = self
+        let Some(i) = self
             .outputs
-            .iter_mut()
-            .filter_map(|o| o.background.as_mut())
-            .find(|b| &b.layer == layer)
+            .iter()
+            .position(|o| o.background.as_ref().is_some_and(|b| &b.layer == layer))
         else {
             return;
         };
@@ -562,8 +940,18 @@ impl LayerShellHandler for State {
         if size.is_empty() {
             return;
         }
+        let shm = &self.shm;
+        let Some(bg) = self.outputs[i].background.as_mut() else {
+            return;
+        };
         let changed = bg.configured != size;
         bg.configured = size;
+        if bg.video.is_some() {
+            if changed {
+                self.resize_video(i);
+            }
+            return;
+        }
         if let Some(frame) = bg.pending.take() {
             attach(bg, &frame, shm, viewporter);
         } else if changed {
@@ -594,7 +982,36 @@ impl CompositorHandler for State {
         _: wl_output::Transform,
     ) {
     }
-    fn frame(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &wl_surface::WlSurface, _: u32) {}
+    fn frame(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        surface: &wl_surface::WlSurface,
+        _: u32,
+    ) {
+        // El compositor ya mostró el cuadro anterior de ese monitor: se puede dibujar otro.
+        let Some(i) = self.outputs.iter().position(|o| {
+            o.background
+                .as_ref()
+                .is_some_and(|b| b.layer.wl_surface() == surface)
+        }) else {
+            return;
+        };
+        let redraw = match self.outputs[i]
+            .background
+            .as_mut()
+            .and_then(|b| b.video.as_mut())
+        {
+            Some(v) => {
+                v.frame_pending = false;
+                v.redraw
+            }
+            None => false,
+        };
+        if redraw {
+            self.render_output(i);
+        }
+    }
     fn surface_enter(
         &mut self,
         _: &Connection,

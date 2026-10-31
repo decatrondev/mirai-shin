@@ -1,6 +1,6 @@
 [package]
 name = "miraishin-surface-wayland"
-description = "Fondo con wlr-layer-shell (Sway, Hyprland): una superficie background por monitor, dibujada por memoria compartida"
+description = "Fondo con wlr-layer-shell (Sway, Hyprland): una superficie background por monitor; imágenes por memoria compartida, video con libmpv sobre EGL"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,6 +12,12 @@ miraishin-core = { workspace = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 miraishin-brand = { workspace = true }
 smithay-client-toolkit = { version = "0.21", default-features = false, features = ["calloop"] }
+miraishin-render-video = { workspace = true }
+tracing = { workspace = true }
+# Video (fase 2): EGL y libwayland se cargan al arrancar (dlopen), no hacen falta para compilar.
+khronos-egl = { version = "6", features = ["dynamic"] }
+wayland-egl = "0.32"
+wayland-backend = { version = "0.3", features = ["client_system", "dlopen"] }
 
 [dev-dependencies]
 miraishin-render-image = { workspace = true }

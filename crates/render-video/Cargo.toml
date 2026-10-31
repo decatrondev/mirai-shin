@@ -1,0 +1,15 @@
+[package]
+name = "miraishin-render-video"
+description = "Video con libmpv (API de render, OpenGL): enlaces propios, libmpv se carga al arrancar"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+miraishin-core = { workspace = true }
+libloading = "0.8"
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

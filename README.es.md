@@ -28,6 +28,7 @@ crates/surface-wayland/  fondo en Sway/Hyprland (wlr-layer-shell)
 crates/surface-plasma/   fondo en KDE Plasma (complemento de fondo propio)
 crates/surface-windows/  fondo en Windows (ventana detrás de los íconos del escritorio)
 crates/render-image/     imagen fija: decodificar y encuadrar a cada monitor
+crates/render-video/     video con libmpv (se carga al arrancar; compilación LGPL)
 crates/store/       biblioteca local (SQLite), ajustes (TOML), rutas
 crates/ipc/         protocolo app <-> daemon (socket Unix / named pipe)
 crates/logging/     logs a archivo con rotación diaria

@@ -9,6 +9,7 @@ members = [
     "crates/license",
     "crates/surface-wayland",
     "crates/render-image",
+    "crates/render-video",
     "crates/surface-plasma",
     "crates/surface-windows",
     "apps/daemon",
@@ -58,6 +59,7 @@ miraishin-ipc = { path = "crates/ipc" }
 miraishin-logging = { path = "crates/logging" }
 miraishin-license = { path = "crates/license" }
 miraishin-surface-wayland = { path = "crates/surface-wayland" }
+miraishin-render-video = { path = "crates/render-video" }
 miraishin-render-image = { path = "crates/render-image" }
 miraishin-surface-plasma = { path = "crates/surface-plasma" }
 miraishin-surface-windows = { path = "crates/surface-windows" }
