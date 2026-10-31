@@ -1,6 +1,6 @@
 # Daemon and `miraishin-ctl`
 
-> In development: the daemon does not draw wallpapers yet (that starts in phase 1). Today it keeps the library, writes logs and answers over IPC.
+> In development: the daemon shows still images on Sway and Hyprland (Wayland with `wlr-layer-shell`). KDE Plasma, Windows, video, X11 and GNOME come in upcoming versions.
 
 ## Daemon
 
@@ -9,7 +9,8 @@
 1. Reads the settings.
 2. Opens the library (and migrates it if needed, making a backup first).
 3. Scans the wallpapers folder.
-4. Listens for the app and `miraishin-ctl`.
+4. Puts back the wallpaper chosen for each monitor.
+5. Listens for the app and `miraishin-ctl`.
 
 Only one daemon runs per user. A second one exits with code `3` and leaves the first one untouched.
 
@@ -19,11 +20,18 @@ A console tool to talk to the daemon, shipped with the app for diagnostics and s
 
 | Command | What it does |
 |---|---|
-| `status` | Daemon version, uptime, wallpapers folder, how many wallpapers are valid or have problems, license |
+| `status` | Daemon version, uptime, wallpapers folder, how many wallpapers are valid or have problems, license, and whether this desktop can show the wallpaper (and why not) |
 | `list` | Every wallpaper in the library; the ones with problems show their [codes](wallpaper-format.md#problems) |
-| `rescan` | Reads the wallpapers folder again |
+| `rescan` | Reads the wallpapers folder again (a wallpaper on screen that changed is drawn again) |
+| `outputs` | Monitors (name, size, scale) and what each one shows |
+| `set <folder> [--monitor <name>] [--mode <mode>]` | Sets a wallpaper. Without `--monitor`, the same one on all monitors (and drops what each monitor had). Modes: `fill` (default, crops), `fit` (borders), `stretch`, `center` (real size) |
+| `clear [--monitor <name>]` | Removes the wallpaper. With `--monitor`, that monitor stays without one even if there is one for all |
 | `ping` | Checks that the daemon answers |
 | `shutdown` | Stops the daemon |
+
+The folder is the one shown by `list`; the monitor name, the one shown by `outputs`. A new monitor gets the wallpaper chosen for all. If an image cannot be read, that monitor shows a solid graphite color and `outputs` shows the problem code.
+
+Where the wallpaper cannot be shown yet (KDE Plasma for now, X11, GNOME), `set` still saves the choice and `status` explains why; it is not an error.
 
 Add `--json` to print the daemon's raw answer. Exit codes: `0` ok, `1` error, `2` the daemon is not running (not a failure). The texts follow the language in the settings or, if it is `system`, `LANG`.
 
@@ -36,6 +44,8 @@ Add `--json` to print the daemon's raw answer. Exit codes: `0` ok, `1` error, `2
 | Backups before migrating (last 5) | `…/backups/` | `…\backups\` |
 | Logs (one per day, last 7) | `…/logs/` | `…\logs\` |
 | IPC | `$XDG_RUNTIME_DIR/app/net.decatron.MiraiShin/daemon.sock` (only your user) | named pipe `\\.\pipe\net.decatron.MiraiShin-<user>` |
+
+The library also keeps what was chosen for each monitor.
 
 The library is only an index: the wallpaper folders are the truth. If the library file gets damaged, it is set aside as `library.db.danada-<date>` and rebuilt from the folders.
 

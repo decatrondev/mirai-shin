@@ -1,6 +1,6 @@
 # Daemon y `miraishin-ctl`
 
-> En desarrollo: el daemon todavía no dibuja fondos (eso empieza en la fase 1). Hoy mantiene la biblioteca, escribe logs y responde por IPC.
+> En desarrollo: el daemon muestra imágenes fijas en Sway y Hyprland (Wayland con `wlr-layer-shell`). KDE Plasma, Windows, video, X11 y GNOME llegan en próximas versiones.
 
 ## Daemon
 
@@ -9,7 +9,8 @@
 1. Lee los ajustes.
 2. Abre la biblioteca (y la migra si hace falta, con un respaldo antes).
 3. Recorre la carpeta de fondos.
-4. Queda atento a la app y a `miraishin-ctl`.
+4. Vuelve a poner el fondo elegido en cada monitor.
+5. Queda atento a la app y a `miraishin-ctl`.
 
 Corre un solo daemon por usuario. Un segundo sale con el código `3` y no toca al primero.
 
@@ -19,11 +20,18 @@ Herramienta de consola para hablar con el daemon. Se entrega con la app, para di
 
 | Comando | Qué hace |
 |---|---|
-| `status` | Versión del daemon, tiempo encendido, carpeta de fondos, cuántos fondos son válidos o tienen problemas, licencia |
+| `status` | Versión del daemon, tiempo encendido, carpeta de fondos, cuántos fondos son válidos o tienen problemas, licencia, y si este escritorio puede mostrar el fondo (y si no, por qué) |
 | `list` | Todos los fondos de la biblioteca; los que tienen problemas muestran sus [códigos](wallpaper-format.md#problemas) |
-| `rescan` | Vuelve a leer la carpeta de fondos |
+| `rescan` | Vuelve a leer la carpeta de fondos (un fondo en pantalla que cambió se vuelve a dibujar) |
+| `outputs` | Monitores (nombre, tamaño, escala) y lo que muestra cada uno |
+| `set <carpeta> [--monitor <nombre>] [--mode <modo>]` | Pone un fondo. Sin `--monitor`, el mismo en todos (y se olvida lo que tenía cada monitor). Modos: `fill` (rellenar, por defecto, recorta), `fit` (ajustar, con bordes), `stretch` (estirar), `center` (centrar, tamaño real) |
+| `clear [--monitor <nombre>]` | Quita el fondo. Con `--monitor`, ese monitor queda sin fondo aunque haya uno para todos |
 | `ping` | Comprueba que el daemon responde |
 | `shutdown` | Apaga el daemon |
+
+La carpeta es la que muestra `list`; el nombre del monitor, el que muestra `outputs`. Un monitor nuevo recibe el fondo elegido para todos. Si una imagen no se puede leer, ese monitor muestra un color grafito y `outputs` muestra el código del problema.
+
+Donde todavía no se puede mostrar el fondo (por ahora KDE Plasma, X11 y GNOME), `set` guarda igual lo elegido y `status` explica por qué; no es un error.
 
 Con `--json` muestra la respuesta del daemon tal cual. Códigos de salida: `0` bien, `1` error, `2` el daemon no está corriendo (no es una falla). Los textos salen en el idioma de los ajustes o, si es `system`, en el de `LANG`.
 
@@ -36,6 +44,8 @@ Con `--json` muestra la respuesta del daemon tal cual. Códigos de salida: `0` b
 | Respaldos antes de migrar (los 5 últimos) | `…/backups/` | `…\backups\` |
 | Logs (uno por día, los 7 últimos) | `…/logs/` | `…\logs\` |
 | IPC | `$XDG_RUNTIME_DIR/app/net.decatron.MiraiShin/daemon.sock` (solo tu usuario) | named pipe `\\.\pipe\net.decatron.MiraiShin-<usuario>` |
+
+La biblioteca también guarda lo elegido para cada monitor.
 
 La biblioteca es solo un índice: la verdad son las carpetas de fondos. Si el archivo de la biblioteca se daña, se aparta como `library.db.danada-<fecha>` y se reconstruye desde las carpetas.
 

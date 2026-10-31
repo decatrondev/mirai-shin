@@ -4,6 +4,6 @@ pub mod library;
 pub mod paths;
 pub mod settings;
 
-pub use library::{Library, OpenReport, ScanReport, WallpaperRow};
+pub use library::{Assignment, Library, OpenReport, ScanReport, WallpaperRow, ALL_OUTPUTS};
 pub use paths::Paths;
 pub use settings::{Language, LogLevel, Settings};

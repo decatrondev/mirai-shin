@@ -15,7 +15,13 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 /// Migraciones en orden. La posición + 1 es la versión que deja la base.
-const MIGRATIONS: &[&str] = &[include_str!("../migrations/0001_init.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("../migrations/0001_init.sql"),
+    include_str!("../migrations/0002_assignments.sql"),
+];
+
+/// Nombre de monitor que significa «todos los monitores» en `assignments`.
+pub const ALL_OUTPUTS: &str = "*";
 
 /// Respaldos previos a migrar que se conservan.
 pub const KEEP_BACKUPS: usize = 5;
@@ -76,6 +82,15 @@ pub struct WallpaperRow {
     pub issues: Vec<String>,
     pub added_at: String,
     pub updated_at: String,
+}
+
+/// Lo elegido para un monitor (o para todos, con `ALL_OUTPUTS`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Assignment {
+    pub output: String,
+    /// `None` = ese monitor sin fondo.
+    pub folder: Option<String>,
+    pub mode: String,
 }
 
 pub struct Library {
@@ -257,6 +272,62 @@ impl Library {
 
     pub fn schema_version(&self) -> Result<usize, StoreError> {
         user_version(&self.conn)
+    }
+
+    /// Un fondo por su carpeta.
+    pub fn get(&self, folder: &str) -> Result<Option<WallpaperRow>, StoreError> {
+        Ok(self.list()?.into_iter().find(|r| r.folder == folder))
+    }
+
+    pub fn assignments(&self) -> Result<Vec<Assignment>, StoreError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT output, folder, mode FROM assignments ORDER BY output")?;
+        let rows = stmt.query_map([], |r| {
+            Ok(Assignment {
+                output: r.get(0)?,
+                folder: r.get(1)?,
+                mode: r.get(2)?,
+            })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Elige un fondo. Para todos (`ALL_OUTPUTS`) borra lo elegido por monitor: queda el
+    /// mismo en todos. Para un monitor, solo cambia ese.
+    pub fn assign(
+        &mut self,
+        output: &str,
+        folder: &str,
+        mode: &str,
+        now: DateTime<Utc>,
+    ) -> Result<(), StoreError> {
+        let tx = self.conn.transaction()?;
+        if output == ALL_OUTPUTS {
+            tx.execute("DELETE FROM assignments", [])?;
+        }
+        tx.execute(
+            "INSERT INTO assignments (output, folder, mode, updated_at) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(output) DO UPDATE SET folder = ?2, mode = ?3, updated_at = ?4",
+            params![output, folder, mode, now.to_rfc3339()],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Quita el fondo. De todos (`ALL_OUTPUTS`): borra todo lo elegido. De un monitor: ese
+    /// queda sin fondo aunque haya uno para todos.
+    pub fn unassign(&mut self, output: &str, now: DateTime<Utc>) -> Result<(), StoreError> {
+        if output == ALL_OUTPUTS {
+            self.conn.execute("DELETE FROM assignments", [])?;
+        } else {
+            self.conn.execute(
+                "INSERT INTO assignments (output, folder, mode, updated_at) VALUES (?1, NULL, 'fill', ?2)
+                 ON CONFLICT(output) DO UPDATE SET folder = NULL, updated_at = ?2",
+                params![output, now.to_rfc3339()],
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -644,5 +715,52 @@ mod tests {
         let (mut lib, _) =
             Library::open(&t.path().join("library.db"), &t.path().join("b"), at(1)).unwrap();
         assert_eq!(lib.rescan(&wall, at(1)).unwrap().invalid, 1);
+    }
+
+    #[test]
+    fn asignaciones_por_monitor_y_para_todos() {
+        let t = tempfile::tempdir().unwrap();
+        let (mut lib, _) =
+            Library::open(&t.path().join("library.db"), &t.path().join("b"), at(1)).unwrap();
+        assert!(lib.assignments().unwrap().is_empty());
+
+        lib.assign(ALL_OUTPUTS, "lluvia", "fill", at(1)).unwrap();
+        lib.assign("DP-1", "mar", "fit", at(2)).unwrap();
+        let a = lib.assignments().unwrap();
+        assert_eq!(a.len(), 2);
+        assert_eq!(
+            a[1],
+            Assignment {
+                output: "DP-1".into(),
+                folder: Some("mar".into()),
+                mode: "fit".into()
+            }
+        );
+
+        // Quitar en un monitor: queda marcado sin fondo.
+        lib.unassign("DP-1", at(3)).unwrap();
+        let dp = lib
+            .assignments()
+            .unwrap()
+            .into_iter()
+            .find(|x| x.output == "DP-1");
+        assert_eq!(dp.unwrap().folder, None);
+
+        // Uno para todos borra lo de cada monitor.
+        lib.assign("HDMI-A-1", "mar", "fill", at(4)).unwrap();
+        lib.assign(ALL_OUTPUTS, "bosque", "center", at(5)).unwrap();
+        let a = lib.assignments().unwrap();
+        assert_eq!(a.len(), 1);
+        assert_eq!(a[0].folder.as_deref(), Some("bosque"));
+
+        lib.unassign(ALL_OUTPUTS, at(6)).unwrap();
+        assert!(lib.assignments().unwrap().is_empty());
+
+        // Se conserva al reabrir.
+        lib.assign("DP-1", "mar", "fill", at(7)).unwrap();
+        drop(lib);
+        let (lib, _) =
+            Library::open(&t.path().join("library.db"), &t.path().join("b"), at(8)).unwrap();
+        assert_eq!(lib.assignments().unwrap().len(), 1);
     }
 }

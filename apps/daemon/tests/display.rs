@@ -1,0 +1,323 @@
+//! Fondos por monitor con una superficie falsa en memoria (sin pantalla ni Wayland).
+
+use miraishin_core::surface::{
+    check_frame, EventSink, Frame, OutputInfo, Scale, Size, Surface, SurfaceError, SurfaceEvent,
+};
+use miraishin_daemon::display::{SurfaceFactory, FALLBACK};
+use miraishin_daemon::{run, RunConfig};
+use miraishin_ipc::{codes, events, methods, CallError, Client, Endpoint};
+use miraishin_store::Paths;
+use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+#[derive(Default)]
+struct Screen {
+    outputs: Vec<OutputInfo>,
+    frames: HashMap<String, Frame>,
+    sink: Option<EventSink>,
+}
+
+type Shared = Arc<Mutex<Screen>>;
+
+struct FakeSurface(Shared);
+
+impl Surface for FakeSurface {
+    fn outputs(&self) -> Vec<OutputInfo> {
+        self.0.lock().unwrap().outputs.clone()
+    }
+    fn show(&mut self, output: &str, frame: Frame) -> Result<(), SurfaceError> {
+        let mut s = self.0.lock().unwrap();
+        let o = s
+            .outputs
+            .iter()
+            .find(|o| o.name == output)
+            .cloned()
+            .ok_or(SurfaceError::UnknownOutput)?;
+        check_frame(&o, &frame)?;
+        s.frames.insert(output.into(), frame);
+        Ok(())
+    }
+    fn clear(&mut self, output: &str) -> Result<(), SurfaceError> {
+        self.0.lock().unwrap().frames.remove(output);
+        Ok(())
+    }
+}
+
+fn out(name: &str, w: u32, h: u32, scale: u32) -> OutputInfo {
+    OutputInfo {
+        name: name.into(),
+        description: format!("Monitor {name}"),
+        logical: Size::new(w, h),
+        scale: Scale(scale),
+    }
+}
+
+fn factory(screen: Shared) -> SurfaceFactory {
+    Box::new(move |sink| {
+        screen.lock().unwrap().sink = Some(sink);
+        Ok((Box::new(FakeSurface(screen)) as Box<dyn Surface>, "fake"))
+    })
+}
+
+fn endpoint(dir: &std::path::Path) -> Endpoint {
+    #[cfg(unix)]
+    {
+        Endpoint::Unix(dir.join("run/daemon.sock"))
+    }
+    #[cfg(windows)]
+    {
+        let _ = dir;
+        let n = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        Endpoint::Pipe(format!(
+            r"\\.\pipe\miraishin-display-test-{}-{n}",
+            std::process::id()
+        ))
+    }
+}
+
+async fn connect(ep: &Endpoint) -> Client {
+    for _ in 0..100 {
+        if let Ok(c) = Client::connect(ep).await {
+            return c;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    panic!("el daemon no arrancó");
+}
+
+fn image_wallpaper(dir: &std::path::Path, folder: &str, rgba: [u8; 4]) {
+    let f = dir.join(folder);
+    std::fs::create_dir_all(&f).unwrap();
+    image::RgbaImage::from_pixel(20, 10, image::Rgba(rgba))
+        .save(f.join("a.png"))
+        .unwrap();
+    std::fs::write(
+        f.join("manifest.json"),
+        format!(r#"{{"schema_version":1,"id":"{folder}","type":"image","file":"a.png","title":"{folder}"}}"#),
+    )
+    .unwrap();
+}
+
+fn color(screen: &Shared, output: &str) -> Option<[u8; 4]> {
+    let s = screen.lock().unwrap();
+    let f = s.frames.get(output)?;
+    // El centro: con «ajustar» las orillas son del color de fondo.
+    let i = (((f.size.height / 2) * f.size.width + f.size.width / 2) * 4) as usize;
+    Some(f.rgba[i..i + 4].try_into().unwrap())
+}
+
+fn code(r: Result<Value, CallError>) -> String {
+    match r {
+        Err(CallError::Rpc(e)) => e.code,
+        other => panic!("se esperaba un error: {other:?}"),
+    }
+}
+
+async fn wait_for(mut f: impl FnMut() -> bool) {
+    for _ in 0..200 {
+        if f() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("no pasó a tiempo");
+}
+
+const RED: [u8; 4] = [255, 0, 0, 255];
+const BLUE: [u8; 4] = [0, 0, 255, 255];
+
+fn start(paths: &Paths, ep: &Endpoint, screen: &Shared) -> tokio::task::JoinHandle<()> {
+    let config = RunConfig {
+        paths: paths.clone(),
+        endpoint: ep.clone(),
+        init_logging: false,
+        console_logs: false,
+        surface: Some(factory(screen.clone())),
+    };
+    tokio::spawn(async move {
+        run(config).await.unwrap();
+    })
+}
+
+async fn stop(c: &mut Client, task: tokio::task::JoinHandle<()>) {
+    c.call(methods::SHUTDOWN, Value::Null).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), task)
+        .await
+        .unwrap()
+        .unwrap();
+}
+
+#[tokio::test]
+async fn fondos_por_monitor() {
+    let t = tempfile::tempdir().unwrap();
+    let paths = Paths::under(t.path());
+    let ep = endpoint(t.path());
+    let wall = paths.default_wallpapers_dir();
+    image_wallpaper(&wall, "rojo", RED);
+    image_wallpaper(&wall, "azul", BLUE);
+    let roto = wall.join("roto");
+    std::fs::create_dir_all(&roto).unwrap();
+    std::fs::write(roto.join("manifest.json"), r#"{"schema_version":1}"#).unwrap();
+    let video = wall.join("video");
+    std::fs::create_dir_all(&video).unwrap();
+    std::fs::write(video.join("v.mp4"), b"x").unwrap();
+    std::fs::write(
+        video.join("manifest.json"),
+        r#"{"schema_version":1,"id":"video","type":"video","file":"v.mp4","title":"Video"}"#,
+    )
+    .unwrap();
+
+    let screen: Shared = Arc::new(Mutex::new(Screen {
+        outputs: vec![out("DP-1", 100, 50, 120), out("HDMI-A-1", 40, 40, 240)],
+        ..Screen::default()
+    }));
+    let task = start(&paths, &ep, &screen);
+    let mut c = connect(&ep).await;
+
+    let status = c.call(methods::STATUS, Value::Null).await.unwrap();
+    assert_eq!(status["surface"], json!("fake"));
+    assert_eq!(status["surface_available"], json!(true));
+
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(list["items"].as_array().unwrap().len(), 2);
+    assert_eq!(list["items"][1]["pixel_width"], json!(80));
+    assert_eq!(list["items"][1]["scale_percent"], json!(200));
+    assert_eq!(list["items"][0]["wallpaper"], Value::Null);
+
+    // Uno para todos.
+    let r = c
+        .call(methods::WALLPAPER_SET, json!({"folder": "rojo"}))
+        .await
+        .unwrap();
+    assert_eq!(r["all"], json!("rojo"));
+    assert_eq!(color(&screen, "DP-1"), Some(RED));
+    assert_eq!(color(&screen, "HDMI-A-1"), Some(RED));
+    {
+        let s = screen.lock().unwrap();
+        assert_eq!(s.frames["HDMI-A-1"].size, Size::new(80, 80));
+    }
+    assert_eq!(c.next_event().await.unwrap().event, events::OUTPUTS_CHANGED);
+
+    // Uno distinto en un monitor.
+    let r = c
+        .call(
+            methods::WALLPAPER_SET,
+            json!({"folder": "azul", "output": "HDMI-A-1", "mode": "fit"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r["items"][1]["wallpaper"], json!("azul"));
+    assert_eq!(r["items"][1]["mode"], json!("fit"));
+    assert_eq!(color(&screen, "HDMI-A-1"), Some(BLUE));
+    assert_eq!(color(&screen, "DP-1"), Some(RED));
+
+    // Errores con código, sin cambiar lo que se ve.
+    let set = |p: Value| (methods::WALLPAPER_SET, p);
+    for (params, expected) in [
+        (json!({"folder": "nada"}), codes::WALLPAPER_NOT_FOUND),
+        (json!({"folder": "roto"}), codes::WALLPAPER_INVALID),
+        (
+            json!({"folder": "video"}),
+            codes::WALLPAPER_KIND_UNSUPPORTED,
+        ),
+        (
+            json!({"folder": "rojo", "output": "DP-9"}),
+            codes::UNKNOWN_OUTPUT,
+        ),
+        (
+            json!({"folder": "rojo", "mode": "zoom"}),
+            codes::INVALID_MODE,
+        ),
+        (json!({"carpeta": "rojo"}), codes::INVALID_PARAMS),
+    ] {
+        let (m, p) = set(params);
+        assert_eq!(code(c.call(m, p).await), expected);
+    }
+    assert_eq!(color(&screen, "HDMI-A-1"), Some(BLUE));
+
+    // Quitar en un monitor: ese queda sin fondo, el otro sigue.
+    c.call(methods::WALLPAPER_CLEAR, json!({"output": "HDMI-A-1"}))
+        .await
+        .unwrap();
+    assert_eq!(color(&screen, "HDMI-A-1"), None);
+    assert_eq!(color(&screen, "DP-1"), Some(RED));
+
+    // Un monitor nuevo recibe el de «todos».
+    {
+        let mut s = screen.lock().unwrap();
+        let o = out("DP-2", 30, 20, 120);
+        s.outputs.push(o.clone());
+        (s.sink.as_mut().unwrap())(SurfaceEvent::OutputAdded(o));
+    }
+    wait_for(|| color(&screen, "DP-2") == Some(RED)).await;
+
+    // El archivo desaparece: rescan → ese fondo queda inválido → color de respaldo y código.
+    std::fs::remove_file(wall.join("rojo/a.png")).unwrap();
+    c.call(methods::LIBRARY_RESCAN, Value::Null).await.unwrap();
+    wait_for(|| color(&screen, "DP-1") == Some(FALLBACK)).await;
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(list["items"][0]["problem"], json!("wallpaper_invalid"));
+
+    stop(&mut c, task).await;
+}
+
+#[tokio::test]
+async fn lo_elegido_se_restaura_al_arrancar() {
+    let t = tempfile::tempdir().unwrap();
+    let paths = Paths::under(t.path());
+    let ep = endpoint(t.path());
+    image_wallpaper(&paths.default_wallpapers_dir(), "azul", BLUE);
+    let screen: Shared = Arc::new(Mutex::new(Screen {
+        outputs: vec![out("DP-1", 10, 10, 120)],
+        ..Screen::default()
+    }));
+
+    let task = start(&paths, &ep, &screen);
+    let mut c = connect(&ep).await;
+    c.call(methods::WALLPAPER_SET, json!({"folder": "azul"}))
+        .await
+        .unwrap();
+    stop(&mut c, task).await;
+
+    screen.lock().unwrap().frames.clear();
+    let task = start(&paths, &ep, &screen);
+    let mut c = connect(&ep).await;
+    wait_for(|| color(&screen, "DP-1") == Some(BLUE)).await;
+    stop(&mut c, task).await;
+}
+
+#[tokio::test]
+async fn sin_superficie_se_guarda_igual() {
+    let t = tempfile::tempdir().unwrap();
+    let paths = Paths::under(t.path());
+    let ep = endpoint(t.path());
+    image_wallpaper(&paths.default_wallpapers_dir(), "azul", BLUE);
+    let config = RunConfig {
+        paths: paths.clone(),
+        endpoint: ep.clone(),
+        init_logging: false,
+        console_logs: false,
+        surface: Some(Box::new(|_| Err("kde_plasma_pending".into()))),
+    };
+    let task = tokio::spawn(async move { run(config).await.unwrap() });
+    let mut c = connect(&ep).await;
+    let status = c.call(methods::STATUS, Value::Null).await.unwrap();
+    assert_eq!(status["surface"], json!("kde_plasma_pending"));
+    assert_eq!(status["surface_available"], json!(false));
+    // Un monitor que no se puede comprobar se acepta: se verá cuando haya superficie.
+    let r = c
+        .call(
+            methods::WALLPAPER_SET,
+            json!({"folder": "azul", "output": "Virtual-1"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r["surface_available"], json!(false));
+    assert_eq!(r["items"], json!([]));
+    stop(&mut c, task).await;
+}

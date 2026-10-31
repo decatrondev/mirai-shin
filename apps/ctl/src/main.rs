@@ -2,7 +2,8 @@ mod i18n;
 
 use i18n::{fill, t};
 use miraishin_ipc::{
-    codes, methods, CallError, Client, Endpoint, LibraryList, RescanResult, StatusResult,
+    codes, methods, CallError, Client, Endpoint, LibraryList, OutputsList, RescanResult,
+    StatusResult,
 };
 use miraishin_store::{Language, Paths, Settings};
 use serde_json::{json, Value};
@@ -11,30 +12,97 @@ use std::process::ExitCode;
 /// Salidas: 0 bien, 1 error, 2 daemon apagado (no es una falla).
 const EXIT_NOT_RUNNING: u8 = 2;
 
+/// Lo que se le pide al daemon, ya leído de la línea de comandos.
+#[derive(Debug, PartialEq)]
+struct Command {
+    method: &'static str,
+    params: Value,
+    as_json: bool,
+}
+
+#[derive(Debug, PartialEq)]
+enum Parsed {
+    Run(Command),
+    Help,
+    /// (clave del texto, lo que estaba mal)
+    Bad(&'static str, String),
+}
+
+/// Lee los argumentos. Pura: se prueba sin daemon.
+fn parse(args: &[String]) -> Parsed {
+    let mut as_json = false;
+    let mut monitor: Option<String> = None;
+    let mut mode: Option<String> = None;
+    let mut positional: Vec<&str> = Vec::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--json" => as_json = true,
+            "--monitor" | "--mode" => {
+                let Some(v) = it.next() else {
+                    return Parsed::Bad("missing_value", a.clone());
+                };
+                if a == "--monitor" {
+                    monitor = Some(v.clone());
+                } else {
+                    mode = Some(v.clone());
+                }
+            }
+            "--help" | "-h" => return Parsed::Help,
+            f if f.starts_with("--") => return Parsed::Bad("unknown_option", f.to_string()),
+            p => positional.push(p),
+        }
+    }
+    let run = |method, params| {
+        Parsed::Run(Command {
+            method,
+            params,
+            as_json,
+        })
+    };
+    match positional.as_slice() {
+        [] | ["help"] => Parsed::Help,
+        ["status"] => run(methods::STATUS, Value::Null),
+        ["list"] => run(methods::LIBRARY_LIST, Value::Null),
+        ["rescan"] => run(methods::LIBRARY_RESCAN, Value::Null),
+        ["ping"] => run(methods::PING, Value::Null),
+        ["shutdown"] => run(methods::SHUTDOWN, Value::Null),
+        ["outputs"] => run(methods::OUTPUTS_LIST, Value::Null),
+        ["set", folder] => run(
+            methods::WALLPAPER_SET,
+            json!({ "folder": folder, "output": monitor, "mode": mode }),
+        ),
+        ["set"] => Parsed::Bad("set_needs_folder", String::new()),
+        ["clear"] => run(methods::WALLPAPER_CLEAR, json!({ "output": monitor })),
+        [cmd, ..] if KNOWN.contains(cmd) => {
+            Parsed::Bad("extra_argument", positional[1..].join(" "))
+        }
+        [other, ..] => Parsed::Bad("unknown_command", other.to_string()),
+    }
+}
+
+const KNOWN: &[&str] = &[
+    "status", "list", "rescan", "ping", "shutdown", "outputs", "set", "clear", "help",
+];
+
 fn main() -> ExitCode {
     let lang = language();
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let as_json = args.iter().any(|a| a == "--json");
-    let command = args
-        .iter()
-        .find(|a| !a.starts_with("--"))
-        .map(String::as_str);
-
-    let method = match command {
-        Some("status") => methods::STATUS,
-        Some("list") => methods::LIBRARY_LIST,
-        Some("rescan") => methods::LIBRARY_RESCAN,
-        Some("ping") => methods::PING,
-        Some("shutdown") => methods::SHUTDOWN,
-        None | Some("help") => {
+    let Command {
+        method,
+        params,
+        as_json,
+    } = match parse(&args) {
+        Parsed::Run(c) => c,
+        Parsed::Help => {
             println!(
                 "{}",
                 fill(t(lang, "usage"), &[&miraishin_brand::get().name])
             );
             return ExitCode::SUCCESS;
         }
-        Some(other) => {
-            eprintln!("{}", fill(t(lang, "unknown_command"), &[other]));
+        Parsed::Bad(key, arg) => {
+            eprintln!("{}", fill(t(lang, key), &[&arg]));
             return ExitCode::FAILURE;
         }
     };
@@ -63,7 +131,7 @@ fn main() -> ExitCode {
         };
         let hello = json!({ "protocol": miraishin_ipc::PROTOCOL_VERSION, "client": "ctl" });
         let result = match client.call(methods::HELLO, hello).await {
-            Ok(_) => client.call(method, Value::Null).await,
+            Ok(_) => client.call(method, params).await,
             Err(e) => Err(e),
         };
         match result {
@@ -84,7 +152,10 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
             Err(CallError::Rpc(e)) => {
-                eprintln!("{}", fill(t(lang, "daemon_error"), &[&e.code]));
+                match explained(&e.code) {
+                    Some(key) => eprintln!("{}", t(lang, key)),
+                    None => eprintln!("{}", fill(t(lang, "daemon_error"), &[&e.code])),
+                }
                 ExitCode::FAILURE
             }
             Err(_) => {
@@ -141,6 +212,17 @@ fn print_human(lang: Language, method: &str, value: Value) {
                 )
             );
             println!("{}", fill(t(lang, "status_license"), &[&s.license]));
+            print_surface(lang, &s.surface, s.surface_available);
+        }
+        methods::OUTPUTS_LIST => print_outputs(lang, value),
+        methods::WALLPAPER_SET | methods::WALLPAPER_CLEAR => {
+            let list: OutputsList = serde_json::from_value(value.clone()).unwrap_or_default();
+            if list.surface_available {
+                println!("{}", t(lang, "applied"));
+            } else {
+                println!("{}", t(lang, "saved_not_shown"));
+            }
+            print_outputs(lang, value);
         }
         methods::LIBRARY_LIST => {
             let list: LibraryList = serde_json::from_value(value).unwrap_or_default();
@@ -187,6 +269,66 @@ fn print_human(lang: Language, method: &str, value: Value) {
     }
 }
 
+/// Errores del daemon que tienen su explicación propia.
+fn explained(code: &str) -> Option<&'static str> {
+    Some(match code {
+        codes::WALLPAPER_NOT_FOUND => "err_wallpaper_not_found",
+        codes::WALLPAPER_INVALID => "err_wallpaper_invalid",
+        codes::WALLPAPER_KIND_UNSUPPORTED => "err_kind_unsupported",
+        codes::UNKNOWN_OUTPUT => "err_unknown_output",
+        codes::INVALID_MODE => "err_invalid_mode",
+        _ => return None,
+    })
+}
+
+/// Línea de `status` sobre cómo se pone el fondo, y si no se puede, por qué.
+fn print_surface(lang: Language, surface: &str, available: bool) {
+    if available {
+        println!("{}", fill(t(lang, "surface_ok"), &[surface]));
+        return;
+    }
+    let key = match surface {
+        "kde_plasma_pending" => "surface_kde_pending",
+        "no_wayland" => "surface_no_wayland",
+        "no_layer_shell" => "surface_no_layer_shell",
+        "platform_pending" => "surface_platform_pending",
+        _ => "surface_unavailable",
+    };
+    println!("{}", fill(t(lang, key), &[surface]));
+}
+
+fn print_outputs(lang: Language, value: Value) {
+    let list: OutputsList = serde_json::from_value(value).unwrap_or_default();
+    if !list.surface_available {
+        print_surface(lang, &list.surface, false);
+    } else if list.items.is_empty() {
+        println!("{}", t(lang, "outputs_none"));
+    }
+    if let Some(all) = &list.all {
+        let mode = list.all_mode.clone().unwrap_or_default();
+        println!("{}", fill(t(lang, "outputs_all"), &[all, &mode]));
+    }
+    for o in list.items {
+        let what = match (&o.wallpaper, &o.problem) {
+            (Some(w), Some(p)) => fill(t(lang, "outputs_problem"), &[w, p]),
+            (Some(w), None) => fill(
+                t(lang, "outputs_showing"),
+                &[w, o.mode.as_deref().unwrap_or_default()],
+            ),
+            (None, _) => t(lang, "outputs_empty").to_string(),
+        };
+        let desc = if o.description.is_empty() {
+            String::new()
+        } else {
+            format!(" — {}", o.description)
+        };
+        println!(
+            "  {}{desc} — {}×{} ({} %) — {what}",
+            o.name, o.width, o.height, o.scale_percent
+        );
+    }
+}
+
 fn uptime(secs: u64) -> String {
     let (h, m, s) = (secs / 3600, secs % 3600 / 60, secs % 60);
     if h > 0 {
@@ -195,5 +337,64 @@ fn uptime(secs: u64) -> String {
         format!("{m} min {s} s")
     } else {
         format!("{s} s")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn p(args: &[&str]) -> Parsed {
+        parse(&args.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+    }
+
+    #[test]
+    fn comandos_simples() {
+        assert_eq!(p(&[]), Parsed::Help);
+        let Parsed::Run(c) = p(&["status", "--json"]) else {
+            panic!()
+        };
+        assert_eq!((c.method, c.as_json), (methods::STATUS, true));
+        assert_eq!(
+            p(&["volar"]),
+            Parsed::Bad("unknown_command", "volar".into())
+        );
+        assert_eq!(
+            p(&["--nada"]),
+            Parsed::Bad("unknown_option", "--nada".into())
+        );
+        assert_eq!(p(&["ping", "x"]), Parsed::Bad("extra_argument", "x".into()));
+    }
+
+    #[test]
+    fn set_y_clear() {
+        let Parsed::Run(c) = p(&["set", "lluvia"]) else {
+            panic!()
+        };
+        assert_eq!(c.method, methods::WALLPAPER_SET);
+        assert_eq!(
+            c.params,
+            json!({"folder": "lluvia", "output": null, "mode": null})
+        );
+        // Las opciones van en cualquier orden.
+        let Parsed::Run(c) = p(&["--mode", "fit", "set", "mar", "--monitor", "DP-1"]) else {
+            panic!()
+        };
+        assert_eq!(
+            c.params,
+            json!({"folder": "mar", "output": "DP-1", "mode": "fit"})
+        );
+        assert_eq!(p(&["set"]), Parsed::Bad("set_needs_folder", String::new()));
+        assert_eq!(
+            p(&["set", "x", "--monitor"]),
+            Parsed::Bad("missing_value", "--monitor".into())
+        );
+        let Parsed::Run(c) = p(&["clear", "--monitor", "HDMI-A-1"]) else {
+            panic!()
+        };
+        assert_eq!(
+            (c.method, c.params),
+            (methods::WALLPAPER_CLEAR, json!({"output": "HDMI-A-1"}))
+        );
     }
 }

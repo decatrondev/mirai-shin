@@ -1,6 +1,6 @@
 [package]
 name = "miraishin-daemon"
-description = "Daemon: mantiene la biblioteca, escribe logs y responde por IPC. Dibuja desde la fase 1"
+description = "Daemon: mantiene la biblioteca, pone los fondos en cada monitor, escribe logs y responde por IPC"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -16,6 +16,8 @@ miraishin-store = { workspace = true }
 miraishin-ipc = { workspace = true }
 miraishin-logging = { workspace = true }
 miraishin-license = { workspace = true }
+miraishin-core = { workspace = true }
+miraishin-render-image = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -23,5 +25,10 @@ chrono = { workspace = true }
 tracing = { workspace = true }
 anyhow = { workspace = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+miraishin-surface-wayland = { workspace = true }
+
 [dev-dependencies]
 tempfile = { workspace = true }
+image = { version = "0.25", default-features = false, features = ["png"] }
+miraishin-core = { workspace = true }

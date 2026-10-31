@@ -15,10 +15,15 @@ pub mod methods {
     pub const LIBRARY_LIST: &str = "library.list";
     pub const LIBRARY_RESCAN: &str = "library.rescan";
     pub const SHUTDOWN: &str = "shutdown";
+    pub const OUTPUTS_LIST: &str = "outputs.list";
+    pub const WALLPAPER_SET: &str = "wallpaper.set";
+    pub const WALLPAPER_CLEAR: &str = "wallpaper.clear";
 }
 
 pub mod events {
     pub const LIBRARY_CHANGED: &str = "library_changed";
+    /// Se conectó, desconectó o cambió un monitor, o cambió lo que muestra.
+    pub const OUTPUTS_CHANGED: &str = "outputs_changed";
 }
 
 /// Códigos de error. Nunca se manda el mensaje interno, solo el código.
@@ -29,6 +34,14 @@ pub mod codes {
     pub const LINE_TOO_LONG: &str = "line_too_long";
     pub const INTERNAL: &str = "internal";
     pub const WALLPAPERS_DIR_MISSING: &str = "wallpapers_dir_missing";
+    /// No hay un fondo con esa carpeta en la biblioteca.
+    pub const WALLPAPER_NOT_FOUND: &str = "wallpaper_not_found";
+    /// El fondo tiene problemas (ver `library.list`).
+    pub const WALLPAPER_INVALID: &str = "wallpaper_invalid";
+    /// Ese tipo de fondo todavía no se puede mostrar (video llega en la fase 2).
+    pub const WALLPAPER_KIND_UNSUPPORTED: &str = "wallpaper_kind_unsupported";
+    pub const UNKNOWN_OUTPUT: &str = "unknown_output";
+    pub const INVALID_MODE: &str = "invalid_mode";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -122,6 +135,11 @@ pub struct StatusResult {
     pub invalid: u64,
     #[serde(default)]
     pub license: String,
+    /// Cómo se pone el fondo (`layer_shell`, …) o el código de por qué no se puede.
+    #[serde(default)]
+    pub surface: String,
+    #[serde(default)]
+    pub surface_available: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -155,6 +173,66 @@ pub struct RescanResult {
     pub invalid: u64,
     #[serde(default)]
     pub removed: u64,
+}
+
+/// Un monitor y lo que muestra.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct OutputItem {
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    /// Tamaño lógico.
+    #[serde(default)]
+    pub width: u32,
+    #[serde(default)]
+    pub height: u32,
+    #[serde(default)]
+    pub scale_percent: u32,
+    #[serde(default)]
+    pub pixel_width: u32,
+    #[serde(default)]
+    pub pixel_height: u32,
+    /// Carpeta del fondo que muestra, si muestra uno.
+    #[serde(default)]
+    pub wallpaper: Option<String>,
+    #[serde(default)]
+    pub mode: Option<String>,
+    /// Código si no pudo mostrar lo elegido (se ve el color de respaldo).
+    #[serde(default)]
+    pub problem: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct OutputsList {
+    #[serde(default)]
+    pub items: Vec<OutputItem>,
+    #[serde(default)]
+    pub surface: String,
+    #[serde(default)]
+    pub surface_available: bool,
+    /// Lo elegido para todos los monitores, si hay.
+    #[serde(default)]
+    pub all: Option<String>,
+    #[serde(default)]
+    pub all_mode: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct WallpaperSetParams {
+    pub folder: String,
+    /// Sin monitor: el mismo en todos.
+    #[serde(default)]
+    pub output: Option<String>,
+    /// `fill` (por defecto), `fit`, `stretch`, `center`.
+    #[serde(default)]
+    pub mode: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct WallpaperClearParams {
+    /// Sin monitor: se quita de todos.
+    #[serde(default)]
+    pub output: Option<String>,
 }
 
 #[cfg(test)]

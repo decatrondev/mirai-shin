@@ -25,6 +25,11 @@ fn endpoint(dir: &std::path::Path) -> Endpoint {
     }
 }
 
+/// Sin pantalla: el daemon funciona igual (biblioteca, IPC) y lo dice en `status`.
+fn no_surface() -> miraishin_daemon::display::SurfaceFactory {
+    Box::new(|_| Err("test_no_surface".into()))
+}
+
 async fn connect(ep: &Endpoint) -> Client {
     for _ in 0..100 {
         if let Ok(c) = Client::connect(ep).await {
@@ -62,6 +67,7 @@ async fn ciclo_completo() {
         endpoint: ep.clone(),
         init_logging: false,
         console_logs: false,
+        surface: Some(no_surface()),
     }));
     let mut c = connect(&ep).await;
 
@@ -118,6 +124,7 @@ async fn ciclo_completo() {
         endpoint: ep.clone(),
         init_logging: false,
         console_logs: false,
+        surface: Some(no_surface()),
     })
     .await;
     assert!(matches!(second, Err(RunError::AlreadyRunning)));
@@ -160,6 +167,7 @@ async fn carpeta_elegida_que_no_existe() {
         endpoint: ep.clone(),
         init_logging: false,
         console_logs: false,
+        surface: Some(no_surface()),
     }));
     let mut c = connect(&ep).await;
     let status = c.call(methods::STATUS, Value::Null).await.unwrap();

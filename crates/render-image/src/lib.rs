@@ -10,9 +10,11 @@
 use std::io::{BufRead, Cursor, Seek};
 use std::path::Path;
 
-use image::{imageops, DynamicImage, ImageDecoder, ImageFormat, ImageReader, RgbaImage};
+use image::{imageops, DynamicImage, ImageDecoder, ImageFormat, ImageReader};
 use miraishin_core::fit::{place, FitMode};
 use miraishin_core::surface::{Frame, Size};
+
+pub use image::RgbaImage;
 
 /// Límite por defecto: 8192×8192 píxeles (unos 268 MB ya decodificada en RGBA).
 /// Estimación no verificada de lo razonable para un fondo; se ajusta con datos reales.

@@ -21,9 +21,11 @@ Plataformas: Linux primero, luego Windows. Mac a futuro.
 ```
 brand.json          identidad del producto (nombre, kanji, lema, enlaces)
 apps/landing/       sitio web (React, Vite, TypeScript)       en curso
-apps/daemon/        proceso de fondo que dibujará el fondo   fase 0
-apps/ctl/           consola para hablar con el daemon        fase 0
-crates/core/        reglas puras: formato de fondo y su validador
+apps/daemon/        proceso de fondo que dibuja el fondo     fase 1
+apps/ctl/           consola para hablar con el daemon        fase 1
+crates/core/        reglas puras: formato de fondo, contrato de superficie, encuadre
+crates/surface-wayland/  fondo en Sway/Hyprland (wlr-layer-shell)
+crates/render-image/     imagen fija: decodificar y encuadrar a cada monitor
 crates/store/       biblioteca local (SQLite), ajustes (TOML), rutas
 crates/ipc/         protocolo app <-> daemon (socket Unix / named pipe)
 crates/logging/     logs a archivo con rotación diaria

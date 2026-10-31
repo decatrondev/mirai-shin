@@ -25,6 +25,7 @@ fn main() -> ExitCode {
         endpoint,
         init_logging: true,
         console_logs: true,
+        surface: None,
     };
     match runtime.block_on(run(config)) {
         Ok(()) => ExitCode::SUCCESS,

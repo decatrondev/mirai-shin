@@ -21,9 +21,11 @@ Platforms: Linux first, then Windows. Mac in the future.
 ```
 brand.json          product identity (name, kanji, motto, links)
 apps/landing/       website (React, Vite, TypeScript)        in progress
-apps/daemon/        background process that will draw the wallpaper   phase 0
-apps/ctl/           console tool to talk to the daemon       phase 0
-crates/core/        pure rules: wallpaper format and its validator
+apps/daemon/        background process that draws the wallpaper   phase 1
+apps/ctl/           console tool to talk to the daemon       phase 1
+crates/core/        pure rules: wallpaper format, surface contract, framing
+crates/surface-wayland/  wallpaper on Sway/Hyprland (wlr-layer-shell)
+crates/render-image/     still image: decode and fit to each monitor
 crates/store/       local library (SQLite), settings (TOML), paths
 crates/ipc/         app <-> daemon protocol (Unix socket / named pipe)
 crates/logging/     log files with daily rotation

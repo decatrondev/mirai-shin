@@ -1,15 +1,18 @@
-//! Daemon: arranca, lee ajustes, mantiene la biblioteca y responde por IPC.
-//! En la fase 0 no dibuja nada; el fondo detrás de los íconos llega en la fase 1.
+//! Daemon: arranca, lee ajustes, mantiene la biblioteca, pone los fondos y responde por IPC.
+
+pub mod display;
 
 use chrono::Utc;
+use display::{Display, SurfaceFactory};
+use miraishin_core::fit::FitMode;
 use miraishin_ipc::{
     codes, events, methods, serve, BindError, Endpoint, Event, Handler, HandlerFuture, HelloParams,
     HelloResult, LibraryItem, LibraryList, Listener, RescanResult, RpcError, StatusResult,
-    PROTOCOL_VERSION,
+    WallpaperClearParams, WallpaperSetParams, PROTOCOL_VERSION,
 };
 use miraishin_license::LicenseProvider;
 use miraishin_store::library::StoreError;
-use miraishin_store::{paths::redact, Library, Paths, Settings};
+use miraishin_store::{paths::redact, Library, Paths, Settings, ALL_OUTPUTS};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -26,6 +29,9 @@ pub const METHODS: &[&str] = &[
     methods::LIBRARY_LIST,
     methods::LIBRARY_RESCAN,
     methods::SHUTDOWN,
+    methods::OUTPUTS_LIST,
+    methods::WALLPAPER_SET,
+    methods::WALLPAPER_CLEAR,
 ];
 
 pub struct RunConfig {
@@ -34,6 +40,8 @@ pub struct RunConfig {
     /// En pruebas el registro global ya puede estar instalado: no se toca.
     pub init_logging: bool,
     pub console_logs: bool,
+    /// Cómo se pone el fondo. `None` = la de este escritorio (`display::auto_surface`).
+    pub surface: Option<SurfaceFactory>,
 }
 
 #[derive(Debug)]
@@ -116,8 +124,22 @@ pub async fn run(config: RunConfig) -> Result<(), RunError> {
 
     let (events_tx, _) = broadcast::channel(64);
     let shutdown = Arc::new(Notify::new());
+    let library = Arc::new(Mutex::new(library));
+    let screen = Display::start(
+        config.surface.unwrap_or_else(display::auto_surface),
+        library.clone(),
+        wallpapers_dir.clone(),
+        events_tx.clone(),
+    );
+    let (surface_name, surface_ok) = screen.surface();
+    tracing::info!(
+        surface = surface_name,
+        available = surface_ok,
+        "wallpaper surface"
+    );
     let daemon = Arc::new(Daemon {
-        library: Arc::new(Mutex::new(library)),
+        library,
+        display: screen.clone(),
         wallpapers_dir,
         started: Instant::now(),
         license: Box::new(miraishin_license::NotRequired),
@@ -139,6 +161,7 @@ pub async fn run(config: RunConfig) -> Result<(), RunError> {
     .await;
     // Deja salir la respuesta a `shutdown` antes de cerrar.
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    screen.stop();
     tracing::info!("daemon stopped");
     Ok(())
 }
@@ -167,6 +190,7 @@ async fn termination() {
 
 struct Daemon {
     library: Arc<Mutex<Library>>,
+    display: Display,
     wallpapers_dir: PathBuf,
     started: Instant,
     license: Box<dyn LicenseProvider>,
@@ -194,6 +218,8 @@ impl Daemon {
                 let _ = self
                     .events
                     .send(Event::new(events::LIBRARY_CHANGED, json!(result)));
+                // Un fondo puesto pudo cambiar o desaparecer.
+                self.display.apply_nowait();
                 Ok(result)
             }
             Err(StoreError::WallpapersDirMissing) => {
@@ -214,7 +240,60 @@ impl Daemon {
             valid: valid as u64,
             invalid: invalid as u64,
             license: self.license.kind().to_string(),
+            surface: self.display.surface().0.to_string(),
+            surface_available: self.display.surface().1,
         })
+    }
+
+    async fn set_wallpaper(&self, p: WallpaperSetParams) -> Result<Value, RpcError> {
+        let mode = match p.mode.as_deref() {
+            None => FitMode::default(),
+            Some(m) => FitMode::parse(m).ok_or_else(|| RpcError::new(codes::INVALID_MODE))?,
+        };
+        let row = self
+            .lock()
+            .get(&p.folder)
+            .map_err(internal)?
+            .ok_or_else(|| RpcError::new(codes::WALLPAPER_NOT_FOUND))?;
+        if !row.valid {
+            return Err(RpcError::new(codes::WALLPAPER_INVALID));
+        }
+        if row.kind.as_deref() != Some("image") {
+            return Err(RpcError::new(codes::WALLPAPER_KIND_UNSUPPORTED));
+        }
+        let output = self.checked_output(p.output).await?;
+        self.lock()
+            .assign(&output, &p.folder, mode.as_str(), Utc::now())
+            .map_err(internal)?;
+        self.display.apply().await;
+        to_value(self.display.outputs().await)
+    }
+
+    async fn clear_wallpaper(&self, p: WallpaperClearParams) -> Result<Value, RpcError> {
+        let output = self.checked_output(p.output).await?;
+        self.lock()
+            .unassign(&output, Utc::now())
+            .map_err(internal)?;
+        self.display.apply().await;
+        to_value(self.display.outputs().await)
+    }
+
+    /// Monitor pedido, o «todos». Si hay superficie, el monitor tiene que estar conectado;
+    /// si no la hay (todavía), se guarda igual para cuando la haya.
+    async fn checked_output(&self, output: Option<String>) -> Result<String, RpcError> {
+        let Some(name) = output.filter(|o| o != ALL_OUTPUTS) else {
+            return Ok(ALL_OUTPUTS.to_string());
+        };
+        if name.is_empty() || name.len() > 128 || name.chars().any(char::is_control) {
+            return Err(RpcError::new(codes::INVALID_PARAMS));
+        }
+        if self.display.surface().1 {
+            let known = self.display.outputs().await;
+            if !known.items.iter().any(|o| o.name == name) {
+                return Err(RpcError::new(codes::UNKNOWN_OUTPUT));
+            }
+        }
+        Ok(name)
     }
 
     fn list(&self) -> Result<LibraryList, RpcError> {
@@ -247,6 +326,10 @@ fn internal(e: impl std::fmt::Display) -> RpcError {
     RpcError::new(codes::INTERNAL)
 }
 
+fn parse<T: serde::de::DeserializeOwned>(params: Value) -> Result<T, RpcError> {
+    serde_json::from_value(params).map_err(|_| RpcError::new(codes::INVALID_PARAMS))
+}
+
 fn to_value(v: impl serde::Serialize) -> Result<Value, RpcError> {
     serde_json::to_value(v).map_err(internal)
 }
@@ -273,6 +356,16 @@ impl Handler for Daemon {
                 methods::STATUS => to_value(self.status()?),
                 methods::LIBRARY_LIST => to_value(self.list()?),
                 methods::LIBRARY_RESCAN => to_value(self.rescan().await?),
+                methods::OUTPUTS_LIST => to_value(self.display.outputs().await),
+                methods::WALLPAPER_SET => self.set_wallpaper(parse(params)?).await,
+                methods::WALLPAPER_CLEAR => {
+                    let p = if params.is_null() {
+                        WallpaperClearParams::default()
+                    } else {
+                        parse(params)?
+                    };
+                    self.clear_wallpaper(p).await
+                }
                 methods::SHUTDOWN => {
                     self.shutdown.notify_one();
                     Ok(json!({ "stopping": true }))
