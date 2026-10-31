@@ -25,6 +25,8 @@ apps/daemon/        background process that draws the wallpaper   phase 1
 apps/ctl/           console tool to talk to the daemon       phase 1
 crates/core/        pure rules: wallpaper format, surface contract, framing
 crates/surface-wayland/  wallpaper on Sway/Hyprland (wlr-layer-shell)
+crates/surface-plasma/   wallpaper on KDE Plasma (own wallpaper add-on)
+crates/surface-windows/  wallpaper on Windows (window behind the desktop icons)
 crates/render-image/     still image: decode and fit to each monitor
 crates/store/       local library (SQLite), settings (TOML), paths
 crates/ipc/         app <-> daemon protocol (Unix socket / named pipe)

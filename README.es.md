@@ -25,6 +25,8 @@ apps/daemon/        proceso de fondo que dibuja el fondo     fase 1
 apps/ctl/           consola para hablar con el daemon        fase 1
 crates/core/        reglas puras: formato de fondo, contrato de superficie, encuadre
 crates/surface-wayland/  fondo en Sway/Hyprland (wlr-layer-shell)
+crates/surface-plasma/   fondo en KDE Plasma (complemento de fondo propio)
+crates/surface-windows/  fondo en Windows (ventana detrás de los íconos del escritorio)
 crates/render-image/     imagen fija: decodificar y encuadrar a cada monitor
 crates/store/       biblioteca local (SQLite), ajustes (TOML), rutas
 crates/ipc/         protocolo app <-> daemon (socket Unix / named pipe)

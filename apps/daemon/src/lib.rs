@@ -244,7 +244,7 @@ impl Daemon {
             license: self.license.kind().to_string(),
             surface: self.display.surface().0.to_string(),
             surface_available: self.display.surface().1,
-            desktop: env_text("XDG_CURRENT_DESKTOP"),
+            desktop: desktop_name(),
             session: env_text("XDG_SESSION_TYPE"),
         })
     }
@@ -328,6 +328,15 @@ impl Daemon {
 fn internal(e: impl std::fmt::Display) -> RpcError {
     tracing::error!(error = %e, "internal error");
     RpcError::new(codes::INTERNAL)
+}
+
+/// Escritorio para `status`: en Linux sale de `XDG_CURRENT_DESKTOP`; en Windows no hay
+/// variable, y la forma del escritorio va en el nombre de la superficie.
+fn desktop_name() -> String {
+    if cfg!(windows) {
+        return "Windows".into();
+    }
+    env_text("XDG_CURRENT_DESKTOP")
 }
 
 /// Variable de entorno para mostrar: corta y sin caracteres de control.

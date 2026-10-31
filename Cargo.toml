@@ -10,6 +10,7 @@ members = [
     "crates/surface-wayland",
     "crates/render-image",
     "crates/surface-plasma",
+    "crates/surface-windows",
     "apps/daemon",
     "apps/ctl",
     "tools/layer-probe",
@@ -59,6 +60,7 @@ miraishin-license = { path = "crates/license" }
 miraishin-surface-wayland = { path = "crates/surface-wayland" }
 miraishin-render-image = { path = "crates/render-image" }
 miraishin-surface-plasma = { path = "crates/surface-plasma" }
+miraishin-surface-windows = { path = "crates/surface-windows" }
 
 [profile.release]
 lto = "thin"

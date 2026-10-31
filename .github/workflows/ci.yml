@@ -43,3 +43,20 @@ jobs:
       - name: Pruebas
         shell: bash
         run: cargo test --workspace $([ "$RUNNER_OS" = Windows ] && echo --exclude miraishin-web)
+      # Paquete de prueba para Windows (fase 1.8): daemon y ctl en release, como artefacto.
+      # El CI no tiene escritorio real; el fondo se prueba en un Windows de verdad.
+      - name: Compilar exe de Windows
+        if: runner.os == 'Windows' && github.event_name == 'push'
+        shell: bash
+        run: |
+          cargo build --release -p miraishin-daemon -p miraishin-ctl
+          # El manifiesto (DPI por monitor y Windows 8+) tiene que ir dentro del exe.
+          grep -q PerMonitorV2 target/release/miraishin-daemon.exe
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows' && github.event_name == 'push'
+        with:
+          name: windows-x64
+          path: |
+            target/release/miraishin-daemon.exe
+            target/release/miraishin-ctl.exe
+          retention-days: 14

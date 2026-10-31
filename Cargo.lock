@@ -1428,6 +1428,7 @@ dependencies = [
  "miraishin-store",
  "miraishin-surface-plasma",
  "miraishin-surface-wayland",
+ "miraishin-surface-windows",
  "serde",
  "serde_json",
  "tempfile",
@@ -1524,6 +1525,16 @@ dependencies = [
  "miraishin-core",
  "miraishin-render-image",
  "smithay-client-toolkit",
+]
+
+[[package]]
+name = "miraishin-surface-windows"
+version = "0.1.0"
+dependencies = [
+ "miraishin-brand",
+ "miraishin-core",
+ "tracing",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

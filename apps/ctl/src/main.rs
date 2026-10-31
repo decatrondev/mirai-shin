@@ -218,12 +218,17 @@ fn print_human(lang: Language, method: &str, value: Value) {
             } else {
                 &s.desktop
             };
-            let session = if s.session.is_empty() {
-                unknown
+            if s.session.is_empty() && !s.desktop.is_empty() {
+                // Windows: no hay tipo de sesión que mostrar.
+                println!("{}", fill(t(lang, "status_desktop_only"), &[desktop]));
             } else {
-                &s.session
-            };
-            println!("{}", fill(t(lang, "status_desktop"), &[desktop, session]));
+                let session = if s.session.is_empty() {
+                    unknown
+                } else {
+                    &s.session
+                };
+                println!("{}", fill(t(lang, "status_desktop"), &[desktop, session]));
+            }
             print_surface(lang, &s.surface, s.surface_available);
         }
         methods::OUTPUTS_LIST => print_outputs(lang, value),
@@ -306,6 +311,7 @@ fn print_surface(lang: Language, surface: &str, available: bool) {
         "no_wayland" => "surface_no_wayland",
         "no_layer_shell" => "surface_no_layer_shell",
         "platform_pending" => "surface_platform_pending",
+        "windows_no_desktop" => "surface_windows_no_desktop",
         _ => "surface_unavailable",
     };
     println!("{}", fill(t(lang, key), &[surface]));

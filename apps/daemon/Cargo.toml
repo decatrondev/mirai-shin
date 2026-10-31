@@ -29,6 +29,9 @@ anyhow = { workspace = true }
 miraishin-surface-wayland = { workspace = true }
 miraishin-surface-plasma = { workspace = true }
 
+[target.'cfg(windows)'.dependencies]
+miraishin-surface-windows = { workspace = true }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 image = { version = "0.25", default-features = false, features = ["png"] }

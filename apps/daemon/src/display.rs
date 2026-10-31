@@ -346,7 +346,17 @@ pub fn auto_surface(data_dir: PathBuf) -> SurfaceFactory {
                 .map(|s| (Box::new(s) as Box<dyn Surface>, "layer_shell"))
                 .map_err(|e| e.as_str().to_string())
         }
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(windows)]
+        {
+            drop(data_dir);
+            miraishin_surface_windows::WindowsSurface::connect(sink)
+                .map(|s| {
+                    let name = s.surface_name();
+                    (Box::new(s) as Box<dyn Surface>, name)
+                })
+                .map_err(|e| e.as_str().to_string())
+        }
+        #[cfg(not(any(target_os = "linux", windows)))]
         {
             drop((sink, data_dir));
             Err("platform_pending".into())
