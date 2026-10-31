@@ -1,6 +1,6 @@
 [package]
 name = "miraishin-core"
-description = "Reglas puras: formato de fondo (manifest.json) y su validador. Sin disco, sin red"
+description = "Reglas puras: formato de fondo (manifest.json), contrato de superficie y encuadre. Sin disco, sin red"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
