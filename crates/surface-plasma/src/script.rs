@@ -16,22 +16,41 @@ pub fn probe(plugin_name: &str) -> String {
     )
 }
 
-/// Pone el cuadro `url` en la pantalla del monitor `output`. Imprime `ok:<tipo anterior>`.
-pub fn show(output: &str, url: &str, plugin_id: &str) -> String {
+/// Pone nuestro complemento en la pantalla del monitor `output` y escribe su configuración
+/// en el orden dado (Plasma avisa al complemento de cada clave). Imprime `ok:<tipo anterior>`.
+pub fn show(output: &str, entries: &[(&str, &str)], plugin_id: &str) -> String {
+    let writes: String = entries
+        .iter()
+        .map(|(k, v)| format!("\n  d.writeConfig({}, {});", lit(k), lit(v)))
+        .collect();
     format!(
         "var s = screenForConnector({out});
 var d = s >= 0 ? desktopForScreen(s) : undefined;
 if (!d) {{ print(\"no_desktop\"); }} else {{
   var prev = d.wallpaperPlugin;
   d.wallpaperPlugin = {id};
-  d.currentConfigGroup = [\"Wallpaper\", {id}, \"General\"];
-  d.writeConfig(\"Image\", {url});
+  d.currentConfigGroup = [\"Wallpaper\", {id}, \"General\"];{writes}
   print(\"ok:\" + prev);
 }}",
         out = lit(output),
         id = lit(plugin_id),
-        url = lit(url),
     )
+}
+
+/// Configuración para mostrar un cuadro fijo (PNG ya encuadrado por el daemon).
+/// La imagen primero: el video se quita cuando la imagen ya está.
+pub fn image_entries(url: &str) -> Vec<(&'static str, String)> {
+    vec![("Image", url.to_string()), ("Video", String::new())]
+}
+
+/// Configuración para reproducir un video. El modo antes que el video, para que arranque
+/// ya encuadrado; la imagen anterior la suelta el complemento cuando el video se ve.
+pub fn video_entries(url: &str, mode: &str) -> Vec<(&'static str, String)> {
+    vec![
+        ("Mode", mode.to_string()),
+        ("Video", url.to_string()),
+        ("Image", String::new()),
+    ]
 }
 
 /// Devuelve el tipo de fondo anterior en la pantalla de `output`, si tiene el nuestro.
@@ -81,15 +100,34 @@ mod tests {
 
     #[test]
     fn el_texto_entra_escapado() {
-        let s = show("DP-1\"); evil(); (\"", "file:///x.png", "net.x.Y");
+        let s = show(
+            "DP-1\"); evil(); (\"",
+            &[("Image", "file:///x.png"), ("Video", "\");x(\"")],
+            "net.x.Y",
+        );
         assert!(s.contains(r#"screenForConnector("DP-1\"); evil(); (\"")"#));
         assert!(s.contains(r#"d.wallpaperPlugin = "net.x.Y";"#));
         assert!(s.contains(r#"d.writeConfig("Image", "file:///x.png");"#));
+        assert!(s.contains(r#"d.writeConfig("Video", "\");x(\"");"#));
+        // En orden.
+        assert!(s.find("\"Image\"").unwrap() < s.find("\"Video\"").unwrap());
         let c = clear("Virtual-1", PLASMA_DEFAULT, "net.x.Y");
         assert!(c.contains(
             r#"if (d.wallpaperPlugin == "net.x.Y") { d.wallpaperPlugin = "org.kde.image"; }"#
         ));
         assert!(probe("Mirai Shin").contains(r#"knownWallpaperPlugins()["Mirai Shin"]"#));
+    }
+
+    #[test]
+    fn claves_de_imagen_y_video() {
+        assert_eq!(
+            image_entries("file:///a.png"),
+            vec![("Image", "file:///a.png".into()), ("Video", String::new())]
+        );
+        let v = video_entries("file:///v.mp4", "fit");
+        assert_eq!(v[0], ("Mode", "fit".into()));
+        assert_eq!(v[1], ("Video", "file:///v.mp4".into()));
+        assert_eq!(v[2], ("Image", String::new()));
     }
 
     #[test]

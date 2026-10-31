@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use image::codecs::png::{CompressionType, FilterType, PngEncoder};
 use image::{ExtendedColorType, ImageEncoder};
+use miraishin_core::fit::FitMode;
 use miraishin_core::surface::{check_frame, EventSink, Frame, OutputInfo, Surface, SurfaceError};
 use miraishin_surface_wayland::OutputWatcher;
 use zbus::blocking::Connection;
@@ -132,27 +133,37 @@ impl Surface for PlasmaSurface {
         check_frame(&self.output(output)?, &frame)?;
         let path = self.write_png(output, &frame)?;
         drop(frame);
-        let reply = eval(
-            &self.dbus,
-            &script::show(output, &script::file_url(&path), package::plugin_id()),
-        );
-        match reply.as_deref().map(script::parse) {
-            Ok(Ok(prev)) => {
-                if !prev.is_empty() && prev != package::plugin_id() {
-                    self.previous.insert(output.to_string(), prev);
-                    self.save_state();
-                }
+        let entries = script::image_entries(&script::file_url(&path));
+        match self.put(output, &entries) {
+            Ok(()) => {
                 if let Some(old) = self.current.insert(output.to_string(), path) {
                     let _ = std::fs::remove_file(old);
                 }
                 Ok(())
             }
-            other => {
-                tracing::warn!(output = %output, reply = ?other, "plasma did not take the frame");
+            Err(e) => {
                 let _ = std::fs::remove_file(&path);
-                Err(SurfaceError::UnknownOutput)
+                Err(e)
             }
         }
+    }
+
+    /// El video lo reproduce Plasma en el complemento (prueba 2.0): aquí solo se le pasa
+    /// el archivo y el encuadre.
+    fn show_video(
+        &mut self,
+        output: &str,
+        video: &Path,
+        mode: FitMode,
+    ) -> Result<(), SurfaceError> {
+        self.output(output)?;
+        let entries = script::video_entries(&script::file_url(video), mode.as_str());
+        self.put(output, &entries)?;
+        // El PNG anterior ya no hace falta: el complemento suelta la imagen al ver el video.
+        if let Some(old) = self.current.remove(output) {
+            let _ = std::fs::remove_file(old);
+        }
+        Ok(())
     }
 
     fn clear(&mut self, output: &str) -> Result<(), SurfaceError> {
@@ -174,6 +185,31 @@ impl Surface for PlasmaSurface {
             let _ = std::fs::remove_file(old);
         }
         Ok(())
+    }
+}
+
+impl PlasmaSurface {
+    /// Pone nuestro complemento en la pantalla de `output` con esa configuración, y recuerda
+    /// el tipo de fondo que había antes.
+    fn put(&mut self, output: &str, entries: &[(&str, String)]) -> Result<(), SurfaceError> {
+        let entries: Vec<(&str, &str)> = entries.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let reply = eval(
+            &self.dbus,
+            &script::show(output, &entries, package::plugin_id()),
+        );
+        match reply.as_deref().map(script::parse) {
+            Ok(Ok(prev)) => {
+                if !prev.is_empty() && prev != package::plugin_id() {
+                    self.previous.insert(output.to_string(), prev);
+                    self.save_state();
+                }
+                Ok(())
+            }
+            other => {
+                tracing::warn!(output = %output, reply = ?other, "plasma did not take the wallpaper");
+                Err(SurfaceError::UnknownOutput)
+            }
+        }
     }
 }
 

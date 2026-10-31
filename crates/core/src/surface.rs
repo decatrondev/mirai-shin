@@ -6,7 +6,11 @@
 //!
 //! Aquí no hay hilos, disco ni Wayland: solo tipos y reglas.
 
+use std::path::Path;
+
 use serde::Serialize;
+
+use crate::fit::FitMode;
 
 /// Escala de un monitor en 1/120 (la misma unidad que `wp_fractional_scale` de Wayland).
 /// 120 = 100 %, 150 = 125 %, 240 = 200 %. Entero para que se pueda comparar sin errores de
@@ -155,6 +159,8 @@ pub enum SurfaceError {
     SizeMismatch,
     /// El sistema de ventanas dejó de responder; la superficie hay que crearla de nuevo.
     Disconnected,
+    /// Esta superficie todavía no reproduce video (fase 2): el daemon pone el respaldo.
+    VideoUnsupported,
 }
 
 impl SurfaceError {
@@ -164,6 +170,7 @@ impl SurfaceError {
             Self::InvalidFrame => "invalid_frame",
             Self::SizeMismatch => "size_mismatch",
             Self::Disconnected => "disconnected",
+            Self::VideoUnsupported => "video_unsupported",
         }
     }
 }
@@ -184,6 +191,19 @@ pub trait Surface: Send {
     /// Muestra un cuadro en un monitor. El cuadro debe medir `pixel_size()` de ese monitor.
     /// Para una imagen fija se llama una vez: la superficie la conserva sin volver a dibujar.
     fn show(&mut self, output: &str, frame: Frame) -> Result<(), SurfaceError>;
+
+    /// Reproduce un video en bucle y sin sonido en un monitor (fase 2). La superficie lo
+    /// encuadra con `mode` y lo decodifica a su manera (en KDE lo hace Plasma). Las que
+    /// todavía no saben responden `VideoUnsupported`.
+    fn show_video(
+        &mut self,
+        output: &str,
+        video: &Path,
+        mode: FitMode,
+    ) -> Result<(), SurfaceError> {
+        let _ = (output, video, mode);
+        Err(SurfaceError::VideoUnsupported)
+    }
 
     /// Quita el fondo de un monitor (vuelve a verse el del sistema).
     fn clear(&mut self, output: &str) -> Result<(), SurfaceError>;

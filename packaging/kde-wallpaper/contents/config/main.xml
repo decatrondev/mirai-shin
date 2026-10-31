@@ -5,9 +5,17 @@
       http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
   <kcfgfile name=""/>
   <group name="General">
-    <!-- Lo escribe el daemon: file:// del cuadro de esta pantalla. -->
+    <!-- Todo lo escribe el daemon. Image: file:// del cuadro fijo de esta pantalla. -->
     <entry name="Image" type="String">
       <default></default>
+    </entry>
+    <!-- Video: file:// del video que se reproduce aquí (vacío si es una imagen). -->
+    <entry name="Video" type="String">
+      <default></default>
+    </entry>
+    <!-- Mode: encuadre del video (fill, fit, stretch, center). -->
+    <entry name="Mode" type="String">
+      <default>fill</default>
     </entry>
   </group>
 </kcfg>

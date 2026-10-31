@@ -1,4 +1,6 @@
 //! Fondos en pantalla (fase 1.5): lo elegido en la biblioteca → un cuadro por monitor.
+//! Los videos (fase 2) no pasan por aquí cuadro a cuadro: se le entrega el archivo a la
+//! superficie, que lo reproduce.
 //!
 //! Corre en su propio hilo, porque decodificar y escalar una imagen tarda (hasta ~1 s con
 //! una foto grande) y no debe frenar las respuestas del IPC. Habla con el resto por canales.
@@ -209,6 +211,30 @@ impl Worker {
             }) {
                 continue;
             }
+            // Video: lo reproduce la superficie. Si no sabe o el archivo falta, respaldo.
+            let source = match source {
+                Ok(Source::Video(path)) => {
+                    let result = if path.is_file() {
+                        surface
+                            .show_video(&output.name, &path, mode)
+                            .map_err(|e| e.as_str().to_string())
+                    } else {
+                        Err("video_unreadable".to_string())
+                    };
+                    match result {
+                        Ok(()) => {
+                            tracing::info!(output = %output.name, folder = %folder,
+                                mode = mode.as_str(), "video wallpaper shown");
+                            self.shown.insert(output.name.clone(), key);
+                            changed = true;
+                            continue;
+                        }
+                        Err(code) => Err(code),
+                    }
+                }
+                Ok(Source::Image(path)) => Ok(path),
+                Err(code) => Err(code),
+            };
             let frame = source.and_then(|path| {
                 let image = decoded
                     .entry(path.clone())
@@ -301,12 +327,18 @@ pub fn resolve(assignments: &[Assignment], output: &str) -> Option<(String, FitM
     Some((folder, FitMode::parse(&chosen.mode).unwrap_or_default()))
 }
 
-/// Versión y archivo de imagen de un fondo, o el código de por qué no se puede mostrar.
+/// Archivo de un fondo según su tipo.
+enum Source {
+    Image(PathBuf),
+    Video(PathBuf),
+}
+
+/// Versión y archivo de un fondo, o el código de por qué no se puede mostrar.
 fn lookup(
     library: &Arc<Mutex<Library>>,
     wallpapers_dir: &std::path::Path,
     folder: &str,
-) -> (String, Result<PathBuf, String>) {
+) -> (String, Result<Source, String>) {
     let lib = library.lock().unwrap_or_else(|p| p.into_inner());
     let row = match lib.get(folder) {
         Ok(Some(r)) => r,
@@ -317,13 +349,15 @@ fn lookup(
     if !row.valid {
         return (version, Err("wallpaper_invalid".into()));
     }
-    if row.kind.as_deref() != Some("image") {
-        return (version, Err("wallpaper_kind_unsupported".into()));
-    }
     let Some(file) = row.file else {
         return (version, Err("wallpaper_invalid".into()));
     };
-    (version, Ok(wallpapers_dir.join(folder).join(file)))
+    let path = wallpapers_dir.join(folder).join(file);
+    match row.kind.as_deref() {
+        Some("image") => (version, Ok(Source::Image(path))),
+        Some("video") => (version, Ok(Source::Video(path))),
+        _ => (version, Err("wallpaper_kind_unsupported".into())),
+    }
 }
 
 /// La superficie de este escritorio, si hay. Los códigos los explica `ctl` (fase 1.6).

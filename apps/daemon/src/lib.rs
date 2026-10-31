@@ -262,7 +262,7 @@ impl Daemon {
         if !row.valid {
             return Err(RpcError::new(codes::WALLPAPER_INVALID));
         }
-        if row.kind.as_deref() != Some("image") {
+        if !matches!(row.kind.as_deref(), Some("image" | "video")) {
             return Err(RpcError::new(codes::WALLPAPER_KIND_UNSUPPORTED));
         }
         let output = self.checked_output(p.output).await?;

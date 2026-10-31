@@ -330,6 +330,9 @@ fn print_outputs(lang: Language, value: Value) {
     }
     for o in list.items {
         let what = match (&o.wallpaper, &o.problem) {
+            (Some(w), Some(p)) if p == "video_unsupported" => {
+                fill(t(lang, "outputs_video_pending"), &[w])
+            }
             (Some(w), Some(p)) => fill(t(lang, "outputs_problem"), &[w, p]),
             (Some(w), None) => fill(
                 t(lang, "outputs_showing"),

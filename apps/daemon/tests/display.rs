@@ -1,5 +1,6 @@
 //! Fondos por monitor con una superficie falsa en memoria (sin pantalla ni Wayland).
 
+use miraishin_core::fit::FitMode;
 use miraishin_core::surface::{
     check_frame, EventSink, Frame, OutputInfo, Scale, Size, Surface, SurfaceError, SurfaceEvent,
 };
@@ -16,6 +17,9 @@ use std::time::Duration;
 struct Screen {
     outputs: Vec<OutputInfo>,
     frames: HashMap<String, Frame>,
+    /// Videos en reproducción (solo si `plays_video`).
+    videos: HashMap<String, (std::path::PathBuf, FitMode)>,
+    plays_video: bool,
     sink: Option<EventSink>,
 }
 
@@ -36,11 +40,31 @@ impl Surface for FakeSurface {
             .cloned()
             .ok_or(SurfaceError::UnknownOutput)?;
         check_frame(&o, &frame)?;
+        s.videos.remove(output);
         s.frames.insert(output.into(), frame);
         Ok(())
     }
+    fn show_video(
+        &mut self,
+        output: &str,
+        video: &std::path::Path,
+        mode: FitMode,
+    ) -> Result<(), SurfaceError> {
+        let mut s = self.0.lock().unwrap();
+        if !s.plays_video {
+            return Err(SurfaceError::VideoUnsupported);
+        }
+        if !s.outputs.iter().any(|o| o.name == output) {
+            return Err(SurfaceError::UnknownOutput);
+        }
+        s.frames.remove(output);
+        s.videos.insert(output.into(), (video.to_path_buf(), mode));
+        Ok(())
+    }
     fn clear(&mut self, output: &str) -> Result<(), SurfaceError> {
-        self.0.lock().unwrap().frames.remove(output);
+        let mut s = self.0.lock().unwrap();
+        s.frames.remove(output);
+        s.videos.remove(output);
         Ok(())
     }
 }
@@ -99,6 +123,17 @@ fn image_wallpaper(dir: &std::path::Path, folder: &str, rgba: [u8; 4]) {
     std::fs::write(
         f.join("manifest.json"),
         format!(r#"{{"schema_version":1,"id":"{folder}","type":"image","file":"a.png","title":"{folder}"}}"#),
+    )
+    .unwrap();
+}
+
+fn video_wallpaper(dir: &std::path::Path, folder: &str) {
+    let f = dir.join(folder);
+    std::fs::create_dir_all(&f).unwrap();
+    std::fs::write(f.join("v.mp4"), b"x").unwrap();
+    std::fs::write(
+        f.join("manifest.json"),
+        format!(r#"{{"schema_version":1,"id":"{folder}","type":"video","file":"v.mp4","title":"{folder}"}}"#),
     )
     .unwrap();
 }
@@ -166,14 +201,6 @@ async fn fondos_por_monitor() {
     let roto = wall.join("roto");
     std::fs::create_dir_all(&roto).unwrap();
     std::fs::write(roto.join("manifest.json"), r#"{"schema_version":1}"#).unwrap();
-    let video = wall.join("video");
-    std::fs::create_dir_all(&video).unwrap();
-    std::fs::write(video.join("v.mp4"), b"x").unwrap();
-    std::fs::write(
-        video.join("manifest.json"),
-        r#"{"schema_version":1,"id":"video","type":"video","file":"v.mp4","title":"Video"}"#,
-    )
-    .unwrap();
 
     let screen: Shared = Arc::new(Mutex::new(Screen {
         outputs: vec![out("DP-1", 100, 50, 120), out("HDMI-A-1", 40, 40, 240)],
@@ -224,10 +251,6 @@ async fn fondos_por_monitor() {
     for (params, expected) in [
         (json!({"folder": "nada"}), codes::WALLPAPER_NOT_FOUND),
         (json!({"folder": "roto"}), codes::WALLPAPER_INVALID),
-        (
-            json!({"folder": "video"}),
-            codes::WALLPAPER_KIND_UNSUPPORTED,
-        ),
         (
             json!({"folder": "rojo", "output": "DP-9"}),
             codes::UNKNOWN_OUTPUT,
@@ -322,5 +345,85 @@ async fn sin_superficie_se_guarda_igual() {
         .unwrap();
     assert_eq!(r["surface_available"], json!(false));
     assert_eq!(r["items"], json!([]));
+    stop(c, task).await;
+}
+
+#[tokio::test]
+async fn videos() {
+    let t = tempfile::tempdir().unwrap();
+    let paths = Paths::under(t.path());
+    let ep = endpoint(t.path());
+    let wall = paths.default_wallpapers_dir();
+    image_wallpaper(&wall, "azul", BLUE);
+    video_wallpaper(&wall, "olas");
+    let screen: Shared = Arc::new(Mutex::new(Screen {
+        outputs: vec![out("DP-1", 10, 10, 120), out("DP-2", 10, 10, 120)],
+        plays_video: true,
+        ..Screen::default()
+    }));
+    let task = start(&paths, &ep, &screen);
+    let mut c = connect(&ep).await;
+
+    // Para todos: la superficie recibe el archivo y el modo, no cuadros.
+    let r = c
+        .call(
+            methods::WALLPAPER_SET,
+            json!({"folder": "olas", "mode": "fit"}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r["items"][0]["wallpaper"], json!("olas"));
+    assert_eq!(r["items"][0]["problem"], Value::Null);
+    {
+        let s = screen.lock().unwrap();
+        let (path, mode) = &s.videos["DP-2"];
+        assert_eq!(path, &wall.join("olas/v.mp4"));
+        assert_eq!(*mode, FitMode::Fit);
+        assert!(s.frames.is_empty());
+    }
+
+    // Imagen en un monitor: ese deja el video.
+    c.call(
+        methods::WALLPAPER_SET,
+        json!({"folder": "azul", "output": "DP-1"}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(color(&screen, "DP-1"), Some(BLUE));
+    assert!(!screen.lock().unwrap().videos.contains_key("DP-1"));
+    assert!(screen.lock().unwrap().videos.contains_key("DP-2"));
+
+    // El archivo desaparece sin rescan: respaldo con su código.
+    std::fs::remove_file(wall.join("olas/v.mp4")).unwrap();
+    c.call(methods::WALLPAPER_CLEAR, json!({"output": "DP-2"}))
+        .await
+        .unwrap();
+    c.call(
+        methods::WALLPAPER_SET,
+        json!({"folder": "olas", "output": "DP-2"}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(color(&screen, "DP-2"), Some(FALLBACK));
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(list["items"][1]["problem"], json!("video_unreadable"));
+    stop(c, task).await;
+
+    // Una superficie que todavía no reproduce video: respaldo y `video_unsupported`.
+    video_wallpaper(&wall, "olas");
+    let screen: Shared = Arc::new(Mutex::new(Screen {
+        outputs: vec![out("DP-1", 10, 10, 120)],
+        ..Screen::default()
+    }));
+    let task = start(&paths, &ep, &screen);
+    let mut c = connect(&ep).await;
+    c.call(methods::LIBRARY_RESCAN, Value::Null).await.unwrap();
+    c.call(methods::WALLPAPER_SET, json!({"folder": "olas"}))
+        .await
+        .unwrap();
+    wait_for(|| color(&screen, "DP-1") == Some(FALLBACK)).await;
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(list["items"][0]["wallpaper"], json!("olas"));
+    assert_eq!(list["items"][0]["problem"], json!("video_unsupported"));
     stop(c, task).await;
 }

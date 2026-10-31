@@ -1,6 +1,6 @@
 # Daemon y `miraishin-ctl`
 
-> En desarrollo: el daemon muestra imágenes fijas en KDE Plasma (con su propio complemento de fondo de Plasma), Sway y Hyprland (Wayland con `wlr-layer-shell`), y en Windows (en prueba). Video, X11 y GNOME llegan en próximas versiones.
+> En desarrollo: el daemon muestra imágenes fijas en KDE Plasma (con su propio complemento de fondo de Plasma), Sway y Hyprland (Wayland con `wlr-layer-shell`), y en Windows (en prueba). Los videos se reproducen en KDE Plasma (en prueba); en Sway, Hyprland y Windows llegan después. X11 y GNOME llegan en próximas versiones.
 
 ## Daemon
 
@@ -31,9 +31,11 @@ Herramienta de consola para hablar con el daemon. Se entrega con la app, para di
 
 La carpeta es la que muestra `list`; el nombre del monitor, el que muestra `outputs`. Un monitor nuevo recibe el fondo elegido para todos. Si una imagen no se puede leer, ese monitor muestra un color grafito y `outputs` muestra el código del problema.
 
+Un fondo de video se repite en bucle, sin sonido, y usa los mismos modos. Donde los videos todavía no están disponibles, el monitor muestra el color grafito y `outputs` lo explica (`video_unsupported`, no es un error); si falta el archivo del video, el código es `video_unreadable`.
+
 Donde todavía no se puede mostrar el fondo (X11 y GNOME), `set` guarda igual lo elegido y `status` explica por qué; no es un error.
 
-En KDE Plasma el daemon instala su complemento de fondo en `~/.local/share/plasma/wallpapers/` y cambia cada pantalla a ese tipo de fondo; `clear` le devuelve a la pantalla el tipo de fondo que tenía antes. La primera vez, Plasma puede necesitar reiniciarse (cerrar sesión y volver a entrar) para ver el complemento: `status` lo avisa.
+En KDE Plasma el daemon instala su complemento de fondo en `~/.local/share/plasma/wallpapers/` y cambia cada pantalla a ese tipo de fondo; `clear` le devuelve a la pantalla el tipo de fondo que tenía antes. La primera vez, Plasma puede necesitar reiniciarse (cerrar sesión y volver a entrar) para ver el complemento: `status` lo avisa. Los videos los reproduce Plasma dentro del complemento (Qt Multimedia); si uno no se puede reproducir, esa pantalla muestra el color grafito y el registro de Plasma dice por qué.
 
 En Windows el daemon pone una ventana por monitor detrás de los íconos del escritorio; los clics llegan a los íconos y al escritorio como siempre. Windows tiene dos formas del escritorio y el daemon detecta cuál hay: `status` muestra `windows_raised` (Windows 11 24H2 en adelante) o `windows_classic` (Windows 10 y Windows 11 hasta 23H2). Si el Explorador se reinicia, el fondo vuelve solo. Si el fondo no se ve, la variable `MIRAISHIN_WORKERW` cambia lo que el daemon le pide al Explorador que prepare: `auto` (por defecto), `none`, o dos números como `0,0` o `0xD,1`; es una ayuda de diagnóstico mientras se prueba la versión de Windows.
 

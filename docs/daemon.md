@@ -1,6 +1,6 @@
 # Daemon and `miraishin-ctl`
 
-> In development: the daemon shows still images on KDE Plasma (through its own Plasma wallpaper add-on), Sway and Hyprland (Wayland with `wlr-layer-shell`), and on Windows (being tested). Video, X11 and GNOME come in upcoming versions.
+> In development: the daemon shows still images on KDE Plasma (through its own Plasma wallpaper add-on), Sway and Hyprland (Wayland with `wlr-layer-shell`), and on Windows (being tested). Videos play on KDE Plasma (being tested); on Sway, Hyprland and Windows they come next. X11 and GNOME come in upcoming versions.
 
 ## Daemon
 
@@ -31,9 +31,11 @@ A console tool to talk to the daemon, shipped with the app for diagnostics and s
 
 The folder is the one shown by `list`; the monitor name, the one shown by `outputs`. A new monitor gets the wallpaper chosen for all. If an image cannot be read, that monitor shows a solid graphite color and `outputs` shows the problem code.
 
+A video wallpaper loops without sound and uses the same modes. Where videos are not available yet, the monitor shows the graphite color and `outputs` says so (`video_unsupported`, not an error); if the video file is missing, the code is `video_unreadable`.
+
 Where the wallpaper cannot be shown yet (X11, GNOME), `set` still saves the choice and `status` explains why; it is not an error.
 
-On KDE Plasma the daemon installs its wallpaper add-on in `~/.local/share/plasma/wallpapers/` and switches each screen to it; `clear` gives the screen back the wallpaper type it had before. The first time, Plasma may need a restart (log out and back in) to see the add-on: `status` says so.
+On KDE Plasma the daemon installs its wallpaper add-on in `~/.local/share/plasma/wallpapers/` and switches each screen to it; `clear` gives the screen back the wallpaper type it had before. The first time, Plasma may need a restart (log out and back in) to see the add-on: `status` says so. Videos are played by Plasma inside the add-on (Qt Multimedia); if one cannot be played, that screen shows the graphite color and Plasma's log has the reason.
 
 On Windows the daemon puts one window per monitor behind the desktop icons; clicks go to the icons and to the desktop as usual. Windows has two desktop layouts and the daemon detects which one is there: `status` shows `windows_raised` (Windows 11 24H2 and later) or `windows_classic` (Windows 10, Windows 11 up to 23H2). If File Explorer restarts, the wallpaper comes back by itself. If the wallpaper does not show, the variable `MIRAISHIN_WORKERW` changes what the daemon asks Explorer to prepare: `auto` (default), `none`, or two numbers such as `0,0` or `0xD,1`; it is a diagnostic aid while the Windows version is being tested.
 
