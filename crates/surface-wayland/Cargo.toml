@@ -1,0 +1,14 @@
+[package]
+name = "miraishin-surface-wayland"
+description = "Fondo con wlr-layer-shell (Sway, Hyprland): una superficie background por monitor, dibujada por memoria compartida"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+miraishin-core = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+miraishin-brand = { workspace = true }
+smithay-client-toolkit = { version = "0.21", default-features = false, features = ["calloop"] }
