@@ -51,7 +51,7 @@ const TEXTS: &[(&str, &str, &str)] = &[
     ("outputs_none", "No se ve ningún monitor.", "No monitors found."),
     ("outputs_all", "Para todos: {} [{}]", "For all: {} [{}]"),
     ("outputs_showing", "fondo: {} [{}]", "wallpaper: {} [{}]"),
-    ("outputs_showing_copy", "fondo: {} [{}] — copia compatible de {} (este equipo no reproducía bien el original)", "wallpaper: {} [{}] — compatible copy at {} (this computer could not play the original well)"),
+    ("outputs_showing_copy", "fondo: {} [{}] — copia compatible de {}, para que este equipo lo reproduzca fluido", "wallpaper: {} [{}] — compatible copy at {}, so this computer plays it smoothly"),
     ("outputs_copying",
      "{}: creando una copia que este equipo pueda reproducir ({} %). Se hace una sola vez; mientras tanto sigue el fondo anterior",
      "{}: making a copy this computer can play ({} %). It is done only once; the previous wallpaper stays meanwhile"),
