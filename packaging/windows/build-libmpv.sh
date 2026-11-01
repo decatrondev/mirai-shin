@@ -96,8 +96,8 @@ if [ ! -f "$PREFIX/bin/ffmpeg.exe" ]; then
   make install
   cd "$WORK"
 fi
-"$PREFIX/bin/ffmpeg.exe" -hide_banner -L | grep -q "GNU Lesser General Public License" \
-  || { echo "FFmpeg no quedó LGPL"; exit 1; }
+grep -q '^#define FFMPEG_LICENSE "LGPL version 2.1 or later"' "$WORK/ffmpeg/config.h" \
+  || { echo "FFmpeg no quedó LGPL: $(grep FFMPEG_LICENSE "$WORK/ffmpeg/config.h")"; exit 1; }
 
 echo "== libass"
 fetch_git https://github.com/libass/libass.git "$LIBASS_TAG" "$LIBASS_COMMIT" libass
