@@ -65,6 +65,7 @@ pub const EVENT_SHUTDOWN: c_int = 1;
 pub const EVENT_LOG_MESSAGE: c_int = 2;
 pub const EVENT_END_FILE: c_int = 7;
 pub const EVENT_FILE_LOADED: c_int = 8;
+pub const EVENT_PLAYBACK_RESTART: c_int = 21;
 
 pub const RENDER_PARAM_INVALID: c_int = 0;
 pub const RENDER_PARAM_API_TYPE: c_int = 1;

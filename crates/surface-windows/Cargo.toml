@@ -1,6 +1,6 @@
 [package]
 name = "miraishin-surface-windows"
-description = "Fondo en Windows: una ventana por monitor detrás de los íconos del escritorio, dibujada con GDI"
+description = "Fondo en Windows: una ventana por monitor detrás de los íconos del escritorio, imágenes con GDI y video con libmpv"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,6 +11,7 @@ miraishin-core = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 miraishin-brand = { workspace = true }
+miraishin-render-video = { workspace = true }
 tracing = { workspace = true }
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",

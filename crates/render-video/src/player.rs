@@ -55,6 +55,15 @@ impl std::error::Error for VideoError {}
 
 type Wakeup = Box<dyn Fn() + Send + Sync>;
 
+/// Lo que dejó `Player::poll`.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Polled {
+    /// Código si el video falló.
+    pub failed: Option<&'static str>,
+    /// El video empezó a reproducirse (ya se ve un cuadro).
+    pub started: bool,
+}
+
 unsafe extern "C" fn trampoline(ctx: *mut c_void) {
     // SAFETY: `ctx` es el `Wakeup` en caja que vive dentro del `Player` hasta después de
     // destruir mpv (ver `Drop`).
@@ -200,13 +209,20 @@ impl Player {
 
     /// Lee los eventos pendientes sin esperar. Devuelve el código si el video falló.
     pub fn drain_events(&self) -> Option<&'static str> {
-        let mut failed = None;
+        self.poll().failed
+    }
+
+    /// Lee los eventos pendientes sin esperar: si el video falló y si ya empezó a verse
+    /// (`playback-restart`, después de `load`).
+    pub fn poll(&self) -> Polled {
+        let mut out = Polled::default();
         loop {
             // SAFETY: como en `wait_loaded`, sin espera.
             let ev = unsafe { &*(self.api.wait_event)(self.handle, 0.0) };
             match ev.event_id {
-                ffi::EVENT_NONE => return failed,
-                ffi::EVENT_END_FILE => failed = end_file(ev).or(failed),
+                ffi::EVENT_NONE => return out,
+                ffi::EVENT_END_FILE => out.failed = end_file(ev).or(out.failed),
+                ffi::EVENT_PLAYBACK_RESTART => out.started = true,
                 ffi::EVENT_LOG_MESSAGE => log(ev),
                 _ => {}
             }

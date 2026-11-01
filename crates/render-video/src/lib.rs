@@ -13,4 +13,4 @@ mod ffi;
 pub mod options;
 mod player;
 
-pub use player::{Player, VideoError};
+pub use player::{Player, Polled, VideoError};

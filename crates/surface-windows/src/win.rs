@@ -2,14 +2,18 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::ptr::{null, null_mut};
 use std::rc::Rc;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
+use miraishin_core::fit::FitMode;
 use miraishin_core::surface::{
     check_frame, EventSink, Frame, OutputInfo, Size, Surface, SurfaceError,
 };
+use miraishin_render_video::Player;
 use windows_sys::Win32::Foundation::{
     GetLastError, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM,
 };
@@ -30,10 +34,11 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     PostThreadMessageW, RegisterClassExW, RegisterWindowMessageW, SendMessageTimeoutW,
     SetLayeredWindowAttributes, SetParent, SetTimer, SetWindowLongPtrW, SetWindowPos,
     TranslateMessage, GWL_EXSTYLE, GWL_STYLE, HTTRANSPARENT, HWND_TOP, LWA_ALPHA, MA_NOACTIVATE,
-    MSG, PM_NOREMOVE, SMTO_ABORTIFHUNG, SMTO_NORMAL, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, WM_APP, WM_DISPLAYCHANGE, WM_DPICHANGED,
+    MSG, PM_NOREMOVE, PM_REMOVE, SMTO_ABORTIFHUNG, SMTO_NORMAL, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, WM_APP, WM_DISPLAYCHANGE, WM_DPICHANGED,
     WM_ERASEBKGND, WM_MOUSEACTIVATE, WM_NCDESTROY, WM_NCHITTEST, WM_PAINT, WM_SETTINGCHANGE,
-    WM_TIMER, WNDCLASSEXW, WS_CHILD, WS_CLIPSIBLINGS, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_POPUP,
+    WM_TIMER, WNDCLASSEXW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_EX_LAYERED,
+    WS_EX_TOOLWINDOW, WS_POPUP,
 };
 
 use crate::layout::{
@@ -67,8 +72,11 @@ impl std::fmt::Display for ConnectError {
 
 impl std::error::Error for ConnectError {}
 
+type VideoReply = mpsc::Sender<Result<(), &'static str>>;
+
 enum Command {
     Show(String, Frame),
+    ShowVideo(String, PathBuf, FitMode, VideoReply),
     Clear(String),
     Shutdown,
 }
@@ -82,6 +90,15 @@ struct Shared {
 const WM_WAKE: u32 = WM_APP + 1;
 const TIMER_DISPLAY: usize = 1;
 const TIMER_EXPLORER: usize = 2;
+/// Cambio de video: si el nuevo no avisa que empezó, el anterior se cierra igual.
+const TIMER_VIDEO_SWAP: usize = 3;
+const VIDEO_SWAP_TIMEOUT_MS: u32 = 3000;
+/// Cuánto se espera a que mpv abra un video antes de responder al daemon.
+const VIDEO_LOAD_TIMEOUT: Duration = Duration::from_secs(8);
+/// Cuánto se espera a que un mpv que se cierra suelte su ventana.
+const VIDEO_CLOSE_TIMEOUT: Duration = Duration::from_secs(3);
+/// Grafito del sistema de diseño (#1c1d21) en BGRX: fondo de la ventana mientras mpv abre.
+const GRAPHITE_BGRX: [u8; 4] = [0x21, 0x1d, 0x1c, 0xff];
 /// `0x052C`: pide a `Progman` que prepare la capa del fondo.
 const SPAWN_WORKERW: u32 = 0x052C;
 
@@ -171,6 +188,28 @@ impl Surface for WindowsSurface {
         self.send(Command::Show(output.to_string(), frame))
     }
 
+    fn show_video(
+        &mut self,
+        output: &str,
+        video: &Path,
+        mode: FitMode,
+    ) -> Result<(), SurfaceError> {
+        self.output(output)?;
+        let (tx, rx) = mpsc::channel();
+        self.send(Command::ShowVideo(
+            output.to_string(),
+            video.to_path_buf(),
+            mode,
+            tx,
+        ))?;
+        match rx.recv_timeout(VIDEO_LOAD_TIMEOUT + Duration::from_secs(2)) {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err("unknown_output")) => Err(SurfaceError::UnknownOutput),
+            Ok(Err(code)) => Err(SurfaceError::Video(code)),
+            Err(_) => Err(SurfaceError::Video("video_unplayable")),
+        }
+    }
+
     fn clear(&mut self, output: &str) -> Result<(), SurfaceError> {
         self.output(output)?;
         self.send(Command::Clear(output.to_string()))
@@ -203,6 +242,8 @@ thread_local! {
     static DISPLAY_DIRTY: Cell<bool> = const { Cell::new(false) };
     /// Explorer se reinició: hay que volver a colgar las ventanas.
     static EXPLORER_RESTARTED: Cell<bool> = const { Cell::new(false) };
+    /// Pasó el tiempo del cambio de video: cerrar los reproductores anteriores.
+    static VIDEO_SWAP_DUE: Cell<bool> = const { Cell::new(false) };
     /// Mensaje registrado `TaskbarCreated` (lo manda Explorer al arrancar).
     static TASKBAR_CREATED: Cell<u32> = const { Cell::new(0) };
 }
@@ -217,14 +258,33 @@ struct Host {
     workerw: HWND,
 }
 
+/// Un video en un monitor. mpv dibuja solo (salida `gpu`, Direct3D 11) en una ventana suya
+/// dentro de la nuestra (`wid`). Probado en Windows 11 25H2 (2026-11-01): se ve debajo de los
+/// íconos y la barra de tareas; con un contexto OpenGL propio en la ventana, en cambio, el
+/// video tapaba todo cuando no quedaba otra ventana encima.
+struct Live {
+    key: (PathBuf, FitMode),
+    player: Player,
+    /// El reproductor anterior sigue hasta que el nuevo muestra su primer cuadro.
+    old: Option<Player>,
+}
+
 struct State {
     hinst: HINSTANCE,
+    thread_id: u32,
+    watcher: HWND,
     wall_class: Vec<u16>,
     spawn: SpawnArgs,
     monitors: Vec<Monitor>,
     /// Lo elegido por monitor (se conserva aunque Explorer se reinicie).
     frames: HashMap<String, Rc<Painted>>,
     windows: HashMap<String, HWND>,
+    /// Video elegido por monitor (se conserva aunque Explorer se reinicie).
+    videos: HashMap<String, (PathBuf, FitMode)>,
+    players: HashMap<String, Live>,
+    /// Reproductores cerrándose en otro hilo (cerrar mpv espera a su ventana, y su ventana
+    /// le habla a este hilo: cerrarlo aquí mismo podría trabarse).
+    closing: Vec<JoinHandle<()>>,
     host: Option<Host>,
     shared: Arc<Mutex<Shared>>,
     events: EventSink,
@@ -286,11 +346,16 @@ fn run(rx: mpsc::Receiver<Command>, shared: Arc<Mutex<Shared>>, events: EventSin
 
         let mut state = State {
             hinst,
+            thread_id: GetCurrentThreadId(),
+            watcher,
             wall_class,
             spawn,
             monitors: Vec::new(),
             frames: HashMap::new(),
             windows: HashMap::new(),
+            videos: HashMap::new(),
+            players: HashMap::new(),
+            closing: Vec::new(),
             host: None,
             shared,
             events,
@@ -307,10 +372,15 @@ fn run(rx: mpsc::Receiver<Command>, shared: Arc<Mutex<Shared>>, events: EventSin
                 while let Ok(cmd) = rx.try_recv() {
                     match cmd {
                         Command::Show(name, frame) => state.show(name, frame),
+                        Command::ShowVideo(name, path, mode, reply) => {
+                            let _ = reply.send(state.show_video(name, path, mode));
+                        }
                         Command::Clear(name) => state.clear(&name),
                         Command::Shutdown => break 'outer,
                     }
                 }
+                // El mismo mensaje lo manda mpv cuando tiene eventos.
+                state.on_mpv();
             } else {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
@@ -322,11 +392,15 @@ fn run(rx: mpsc::Receiver<Command>, shared: Arc<Mutex<Shared>>, events: EventSin
             } else if DISPLAY_DIRTY.replace(false) {
                 state.rescan();
             }
+            if VIDEO_SWAP_DUE.replace(false) {
+                state.close_old_players();
+            }
         }
 
         for name in state.windows.keys().cloned().collect::<Vec<_>>() {
             state.destroy_window(&name);
         }
+        state.wait_closing();
         if let Ok(mut s) = state.shared.lock() {
             s.alive = false;
         }
@@ -350,27 +424,186 @@ impl State {
         });
         drop(frame);
         self.frames.insert(name.clone(), painted.clone());
+        // La imagen se pinta primero y recién después se cierra el video que la tapaba.
+        self.videos.remove(&name);
         if let Some(&hwnd) = self.windows.get(&name) {
             if is_ours(hwnd) {
                 PAINTED.with_borrow_mut(|p| p.insert(hwnd as isize, painted));
                 InvalidateRect(hwnd, null(), 0);
+                self.stop_video(&name);
                 return;
             }
             self.windows.remove(&name);
         }
+        self.stop_video(&name);
         self.create_window(&name);
     }
 
     unsafe fn clear(&mut self, name: &str) {
         self.frames.remove(name);
+        self.videos.remove(name);
         self.destroy_window(name);
     }
 
     unsafe fn destroy_window(&mut self, name: &str) {
+        // mpv suelta su ventana (hija de la nuestra) antes de que la nuestra se destruya.
+        if self.stop_video(name) {
+            self.wait_closing();
+        }
         if let Some(hwnd) = self.windows.remove(name) {
             if is_ours(hwnd) {
                 DestroyWindow(hwnd);
             }
+        }
+    }
+
+    /// Pone un video en un monitor. Responde cuando mpv ya abrió el archivo (o falló).
+    unsafe fn show_video(
+        &mut self,
+        name: String,
+        path: PathBuf,
+        mode: FitMode,
+    ) -> Result<(), &'static str> {
+        if !self.monitors.iter().any(|m| m.name == name) {
+            return Err("unknown_output");
+        }
+        let key = (path, mode);
+        let alive = self.windows.get(&name).is_some_and(|&h| is_ours(h));
+        if alive && self.players.get(&name).is_some_and(|l| l.key == key) {
+            return Ok(());
+        }
+        self.videos.insert(name.clone(), key);
+        self.start_video(&name)
+    }
+
+    /// Arranca el video elegido para `name` en su ventana (la crea si hace falta). El
+    /// reproductor anterior, si lo hay, sigue hasta que el nuevo muestra su primer cuadro.
+    unsafe fn start_video(&mut self, name: &str) -> Result<(), &'static str> {
+        let Some(key) = self.videos.get(name).cloned() else {
+            return Ok(());
+        };
+        // La ventana necesita algo que pintar debajo del video: lo que había, o grafito.
+        if !self.frames.contains_key(name) {
+            let graphite = Rc::new(Painted {
+                size: Size::new(1, 1),
+                bgrx: GRAPHITE_BGRX.to_vec(),
+            });
+            self.frames.insert(name.to_string(), graphite);
+        }
+        let hwnd = match self.windows.get(name) {
+            Some(&h) if is_ours(h) => h,
+            _ => {
+                self.windows.remove(name);
+                self.create_window(name);
+                *self.windows.get(name).ok_or("video_no_window")?
+            }
+        };
+        let thread = self.thread_id;
+        let wakeup = Box::new(move || {
+            // SAFETY: solo deja un mensaje en la cola del hilo de ventanas.
+            unsafe { PostThreadMessageW(thread, WM_WAKE, 0, 0) };
+        });
+        let player = Player::in_window(key.1, hwnd as i64, wakeup).map_err(|e| e.as_str())?;
+        if let Err(e) = player.load(&key.0, VIDEO_LOAD_TIMEOUT) {
+            self.close_player(player);
+            return Err(e.as_str());
+        }
+        let old = match self.players.remove(name) {
+            Some(prev) => {
+                if let Some(older) = prev.old {
+                    self.close_player(older);
+                }
+                Some(prev.player)
+            }
+            None => None,
+        };
+        if old.is_some() {
+            SetTimer(self.watcher, TIMER_VIDEO_SWAP, VIDEO_SWAP_TIMEOUT_MS, None);
+        }
+        tracing::info!(output = name, "video started");
+        self.players
+            .insert(name.to_string(), Live { key, player, old });
+        Ok(())
+    }
+
+    /// Cierra el video de un monitor (sin olvidar cuál era). `true` si había uno.
+    fn stop_video(&mut self, name: &str) -> bool {
+        let Some(live) = self.players.remove(name) else {
+            return false;
+        };
+        self.close_player(live.player);
+        if let Some(old) = live.old {
+            self.close_player(old);
+        }
+        true
+    }
+
+    /// Cierra un reproductor en otro hilo (ver `closing`).
+    fn close_player(&mut self, player: Player) {
+        self.closing.retain(|h| !h.is_finished());
+        if let Ok(h) = std::thread::Builder::new()
+            .name("mpv-close".into())
+            .spawn(move || drop(player))
+        {
+            self.closing.push(h);
+        }
+    }
+
+    /// Espera a que terminen de cerrarse los reproductores, atendiendo los mensajes que
+    /// manden sus ventanas. Los avisos `WM_WAKE` que lleguen mientras tanto se vuelven a
+    /// mandar al final, para no perder órdenes.
+    unsafe fn wait_closing(&mut self) {
+        let end = Instant::now() + VIDEO_CLOSE_TIMEOUT;
+        let mut woke = false;
+        let mut msg: MSG = std::mem::zeroed();
+        while self.closing.iter().any(|h| !h.is_finished()) && Instant::now() < end {
+            while PeekMessageW(&mut msg, null_mut(), 0, 0, PM_REMOVE) != 0 {
+                if msg.hwnd.is_null() && msg.message == WM_WAKE {
+                    woke = true;
+                } else {
+                    TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        if self.closing.iter().any(|h| !h.is_finished()) {
+            tracing::warn!("mpv is taking long to close");
+        }
+        self.closing.retain(|h| !h.is_finished());
+        if woke {
+            PostThreadMessageW(self.thread_id, WM_WAKE, 0, 0);
+        }
+    }
+
+    /// mpv avisó: eventos de cada reproductor. Cuando el nuevo ya se ve, se cierra el
+    /// anterior.
+    fn on_mpv(&mut self) {
+        let mut started = Vec::new();
+        for (name, live) in &self.players {
+            let polled = live.player.poll();
+            if let Some(code) = polled.failed {
+                tracing::warn!(output = %name, code, "video stopped");
+            }
+            if polled.started && live.old.is_some() {
+                started.push(name.clone());
+            }
+        }
+        for name in started {
+            if let Some(old) = self.players.get_mut(&name).and_then(|l| l.old.take()) {
+                self.close_player(old);
+            }
+        }
+    }
+
+    fn close_old_players(&mut self) {
+        let old: Vec<Player> = self
+            .players
+            .values_mut()
+            .filter_map(|l| l.old.take())
+            .collect();
+        for p in old {
+            self.close_player(p);
         }
     }
 
@@ -482,7 +715,12 @@ impl State {
             return;
         }
         PAINTED.with_borrow_mut(|p| p.insert(hwnd as isize, painted));
-        SetWindowLongPtrW(hwnd, GWL_STYLE, (WS_CHILD | WS_CLIPSIBLINGS) as isize);
+        // WS_CLIPCHILDREN: lo que pinta GDI no tapa la ventana de mpv (hija de la nuestra).
+        SetWindowLongPtrW(
+            hwnd,
+            GWL_STYLE,
+            (WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN) as isize,
+        );
         if SetParent(hwnd, host.parent).is_null() {
             tracing::error!(error = GetLastError(), output = name, "SetParent failed");
             DestroyWindow(hwnd);
@@ -537,6 +775,7 @@ impl State {
         for name in self.windows.keys().cloned().collect::<Vec<_>>() {
             if !self.monitors.iter().any(|m| m.name == name) {
                 self.frames.remove(&name);
+                self.videos.remove(&name);
                 self.destroy_window(&name);
             }
         }
@@ -564,6 +803,11 @@ impl State {
         self.host = None;
         for name in self.frames.keys().cloned().collect::<Vec<_>>() {
             self.create_window(&name);
+        }
+        for name in self.videos.keys().cloned().collect::<Vec<_>>() {
+            if let Err(code) = self.start_video(&name) {
+                tracing::warn!(output = %name, code, "video could not start again");
+            }
         }
     }
 }
@@ -727,6 +971,7 @@ unsafe extern "system" fn watch_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARA
             match wp {
                 TIMER_DISPLAY => DISPLAY_DIRTY.set(true),
                 TIMER_EXPLORER => EXPLORER_RESTARTED.set(true),
+                TIMER_VIDEO_SWAP => VIDEO_SWAP_DUE.set(true),
                 _ => {}
             }
             0

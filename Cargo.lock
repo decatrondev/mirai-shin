@@ -1577,6 +1577,7 @@ version = "0.1.0"
 dependencies = [
  "miraishin-brand",
  "miraishin-core",
+ "miraishin-render-video",
  "tracing",
  "windows-sys 0.61.2",
 ]

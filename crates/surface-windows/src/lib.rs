@@ -8,7 +8,8 @@
 //!   layered, debajo de los íconos (`SHELLDLL_DefView`) y encima de la `WorkerW` del fondo.
 //!   El estilo layered se pone con la ventana ya hija y visible (probado en 25H2).
 //!
-//! Se dibuja con GDI en `WM_PAINT` (sin GPU en esta fase); el cuadro se guarda una vez.
+//! Las imágenes se dibujan con GDI en `WM_PAINT`; el cuadro se guarda una vez. Los videos
+//! (fase 2.8) los dibuja mpv con Direct3D 11 en una ventana suya dentro de la nuestra.
 //! El trabajo con ventanas corre en un hilo propio con su bucle de mensajes.
 
 pub mod layout;
