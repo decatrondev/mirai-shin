@@ -47,6 +47,10 @@ modules:
       - --enable-vaapi
       - --enable-libdrm
       - --enable-libdav1d
+    post-install:
+      - install -Dm644 -t /app/share/licenses/${FLATPAK_ID}/ffmpeg LICENSE.md COPYING.LGPLv2.1
+    cleanup:
+      - /share/ffmpeg
     sources:
       - type: archive
         url: https://ffmpeg.org/releases/ffmpeg-7.1.2.tar.xz
@@ -59,6 +63,8 @@ modules:
       - -Dtest=disabled
       - -Dprofile=disabled
       - -Dfontconfig=enabled
+    post-install:
+      - install -Dm644 -t /app/share/licenses/${FLATPAK_ID}/libass ../COPYING
     sources:
       - type: git
         url: https://github.com/libass/libass.git
@@ -77,6 +83,8 @@ modules:
       - -Ddemos=false
       - -Dtests=false
       - -Dlcms=enabled
+    post-install:
+      - install -Dm644 -t /app/share/licenses/${FLATPAK_ID}/libplacebo ../LICENSE
     sources:
       - type: git
         url: https://code.videolan.org/videolan/libplacebo.git
@@ -90,6 +98,8 @@ modules:
       - /bin
     config-opts:
       - --libdir=lib
+    post-install:
+      - install -Dm644 -t /app/share/licenses/${FLATPAK_ID}/libdisplay-info ../LICENSE
     sources:
       - type: git
         url: https://gitlab.freedesktop.org/emersion/libdisplay-info.git
@@ -119,6 +129,8 @@ modules:
       - -Dmanpage-build=disabled
       - -Dhtml-build=disabled
       - -Dpdf-build=disabled
+    post-install:
+      - install -Dm644 -t /app/share/licenses/${FLATPAK_ID}/mpv ../LICENSE.LGPL ../Copyright
     sources:
       - type: git
         url: https://github.com/mpv-player/mpv.git
@@ -136,6 +148,7 @@ modules:
       - install -Dm755 target/release/miraishin-daemon -t /app/bin
       - install -Dm755 target/release/miraishin-ctl -t /app/bin
       - install -Dm755 target/release/miraishin-layer-probe -t /app/bin
+      - install -Dm644 -t /app/share/licenses/${FLATPAK_ID} LICENSE LICENSE-EXCEPTION.md
     sources:
       - type: dir
         path: ../..
