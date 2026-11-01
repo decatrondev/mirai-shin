@@ -172,8 +172,20 @@ for f in "$DIST"/*.dll; do
     bad=1
   fi
   short="${pkg#"$P"-}"
-  if [ -d "/ucrt64/share/licenses/$short" ] && [ ! -d "$DIST/licenses/$short" ]; then
+  [ -d "$DIST/licenses/$short" ] && continue
+  if [ -d "/ucrt64/share/licenses/$short" ]; then
     cp -r "/ucrt64/share/licenses/$short" "$DIST/licenses/"
+  elif [ "$short" = libvpx ]; then
+    # MSYS2 no instala la licencia de libvpx: se baja de su fuente, en la misma versión.
+    ver="$(pacman -Q "$pkg" | awk '{print $2}' | sed 's/-[0-9]*$//')"
+    mkdir -p "$DIST/licenses/libvpx"
+    for f in LICENSE PATENTS AUTHORS; do
+      curl -fsSL --retry 5 --retry-all-errors \
+        "https://raw.githubusercontent.com/webmproject/libvpx/v$ver/$f" -o "$DIST/licenses/libvpx/$f"
+    done
+  else
+    echo "SIN LICENCIA: $name viene de $pkg y no encuentro su texto de licencia"
+    bad=1
   fi
 done
 [ "$bad" = 0 ] || exit 1

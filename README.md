@@ -60,6 +60,8 @@ The Linux package (Flatpak) includes these libraries, built without changes from
 
 The LGPL libraries are separate shared libraries in `/app/lib`, so they can be replaced by another compatible build. Their license texts travel inside the package, in `/app/share/licenses/net.decatron.MiraiShin/`. The app talks to libmpv through its public headers, which are under the ISC license ([`crates/render-video`](crates/render-video)). Everything else comes from the Freedesktop 25.08 runtime, under its own licenses (among them libvpx, BSD, which FFmpeg uses to encode VP9). On KDE Plasma the video is played by Plasma itself (Qt Multimedia), which is not included in the package.
 
+The Windows package carries the same mpv, FFmpeg, libplacebo and libass versions, built in CI with [`packaging/windows/build-libmpv.sh`](packaging/windows/build-libmpv.sh) (MSYS2). There mpv draws with Direct3D 11 and decodes on the graphics card with D3D11VA, which also needs [shaderc](https://github.com/google/shaderc) and [SPIRV-Cross](https://github.com/KhronosGroup/SPIRV-Cross) (Apache-2.0). They sit next to the daemon as separate DLLs (`libmpv-2.dll`, `avcodec-61.dll`…; libass goes inside `libmpv-2.dll`), so they can be replaced too, along with the DLLs they need from MSYS2 (FreeType, HarfBuzz, FriBidi, libvpx, dav1d, zlib, the GCC runtime and others, all under permissive or LGPL licenses). The `licenses\` folder holds every license text and `VERSIONES.txt` the exact version of each piece; the build stops if a DLL comes from a package outside its allowed list.
+
 ---
 
 En español: [`README.es.md`](README.es.md).
