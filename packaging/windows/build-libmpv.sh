@@ -30,7 +30,9 @@ MPV_COMMIT=41f6a645068483470267271e1d09966ca3b9f413
 P=mingw-w64-ucrt-x86_64
 # Paquetes de MSYS2 cuyas DLL pueden ir junto a libmpv (licencia entre paréntesis).
 ALLOWED=(
-  "$P-gcc-libs"      # libgcc/libstdc++ (GPL-3.0 con la excepción de runtime de GCC)
+  "$P-gcc-libs"      # libgcc/libstdc++ (GPL-3.0 con la excepción de runtime de GCC:
+  "$P-libgcc"        # se pueden distribuir junto a programas de cualquier licencia).
+  "$P-libstdc++"     # MSYS2 las separó de gcc-libs en dos paquetes.
   "$P-libwinpthread" # winpthreads (MIT/BSD)
   "$P-freetype"      # FreeType (FTL o GPL-2.0, se usa la FTL)
   "$P-fribidi"       # LGPL-2.1+
