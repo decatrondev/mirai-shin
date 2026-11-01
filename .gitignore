@@ -27,6 +27,7 @@ Thumbs.db
 /packaging/flatpak/build/
 /packaging/flatpak/repo/
 /packaging/flatpak/.flatpak-builder/
+/packaging/windows/build/
 *.flatpak
 
 # Videos de prueba generados (tools/kde-video-probe/make-videos.sh)

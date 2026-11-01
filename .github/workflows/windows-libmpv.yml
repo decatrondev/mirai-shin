@@ -1,0 +1,40 @@
+name: libmpv para Windows
+
+# libmpv LGPL (fase 2.8) con sus DLL, ffmpeg.exe y licencias. Aparte del CI normal: tarda,
+# y solo cambia cuando cambia su script. El resultado queda en caché.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - packaging/windows/**
+      - .github/workflows/windows-libmpv.yml
+
+jobs:
+  libmpv:
+    name: libmpv (Windows x64)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: packaging/windows/dist
+          key: libmpv-${{ hashFiles('packaging/windows/build-libmpv.sh') }}
+      - uses: msys2/setup-msys2@v2
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          msystem: UCRT64
+          update: true
+      - name: Compilar
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash packaging/windows/build-libmpv.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libmpv-windows-x64
+          path: packaging/windows/dist
+          retention-days: 30
