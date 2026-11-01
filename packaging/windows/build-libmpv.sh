@@ -79,7 +79,7 @@ fetch_git() { # url tag commit dir
 echo "== FFmpeg"
 if [ ! -f "$PREFIX/bin/ffmpeg.exe" ]; then
   cd "$WORK"
-  [ -f ffmpeg.tar.xz ] || curl -fsSL "$FFMPEG_URL" -o ffmpeg.tar.xz
+  [ -f ffmpeg.tar.xz ] || curl -fsSL --retry 6 --retry-all-errors --retry-delay 10 --connect-timeout 30 "$FFMPEG_URL" -o ffmpeg.tar.xz
   echo "$FFMPEG_SHA  ffmpeg.tar.xz" | sha256sum -c
   rm -rf ffmpeg && mkdir ffmpeg && tar xf ffmpeg.tar.xz -C ffmpeg --strip-components=1
   cd ffmpeg
