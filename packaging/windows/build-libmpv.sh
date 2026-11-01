@@ -184,8 +184,9 @@ cp "$WORK/libass/COPYING" "$DIST/licenses/libass/"
 cp "$WORK/libplacebo/LICENSE" "$DIST/licenses/libplacebo/"
 cp "$WORK/mpv/LICENSE.LGPL" "$WORK/mpv/Copyright" "$DIST/licenses/mpv/"
 
-for need in libmpv-2.dll ffmpeg.exe avcodec-61.dll avformat-61.dll avutil-59.dll libass-9.dll; do
-  [ -f "$DIST/$need" ] || { echo "Falta $need en dist/"; exit 1; }
+ls "$DIST"
+for need in libmpv-2.dll ffmpeg.exe avcodec-61.dll avformat-61.dll avutil-59.dll '*ass*.dll' '*placebo*.dll'; do
+  compgen -G "$DIST/$need" > /dev/null || { echo "Falta $need en dist/"; exit 1; }
 done
 strip --strip-unneeded "$DIST"/*.dll "$DIST"/*.exe
 # Prueba rápida de las copias compatibles: 1 s de video de prueba a VP9/WebM.
