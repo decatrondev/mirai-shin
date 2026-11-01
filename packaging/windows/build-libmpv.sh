@@ -191,7 +191,10 @@ for need in libmpv-2.dll ffmpeg.exe avcodec-61.dll avformat-61.dll avutil-59.dll
 done
 strip --strip-unneeded "$DIST"/*.dll "$DIST"/*.exe
 # Prueba rápida de las copias compatibles: 1 s de video de prueba a VP9/WebM.
-"$DIST/ffmpeg.exe" -nostdin -hide_banner -loglevel error -f lavfi -i testsrc=size=320x180:duration=1 \
+# (Sin lavfi: va en libavdevice, que no se compila. Entrada: 30 cuadros crudos en gris.)
+head -c $((320 * 180 * 3 / 2 * 30)) /dev/zero | tr '\0' '\200' > "$WORK/prueba.yuv"
+"$DIST/ffmpeg.exe" -nostdin -hide_banner -loglevel error -y \
+  -f rawvideo -pix_fmt yuv420p -video_size 320x180 -framerate 30 -i "$WORK/prueba.yuv" \
   -c:v libvpx-vp9 -deadline realtime -cpu-used 8 -f webm "$WORK/prueba.webm"
 [ -s "$WORK/prueba.webm" ] || { echo "ffmpeg no pudo crear la copia VP9"; exit 1; }
 echo
