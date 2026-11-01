@@ -112,6 +112,7 @@ impl Display {
             tx: tx.clone(),
             video,
             levels: HashMap::new(),
+            fits_saver: HashMap::new(),
             jobs: HashMap::new(),
             failed: HashMap::new(),
             copying: HashMap::new(),
@@ -188,6 +189,8 @@ struct Worker {
     video: VideoOptions,
     /// Nivel al que subió cada video (carpeta, versión) por no verse bien.
     levels: HashMap<(String, String), CopyLevel>,
+    /// Videos (carpeta, versión) que ya son como la copia de ahorro: se leen una vez.
+    fits_saver: HashMap<(String, String), bool>,
     /// Copias en curso y cuánto van.
     jobs: HashMap<PathBuf, u8>,
     /// Copias que fallaron, con su código (se reintentan con el próximo `set`).
@@ -348,8 +351,21 @@ impl Worker {
             let source = match source {
                 Ok(Source::Video(path)) if !path.is_file() => Err("video_unreadable".to_string()),
                 Ok(Source::Video(path)) => {
-                    let level =
-                        level_for(&self.video, &self.levels, &folder, &key.version, largest);
+                    let fits = fits_saver(
+                        &self.video,
+                        &mut self.fits_saver,
+                        &folder,
+                        &key.version,
+                        &path,
+                    );
+                    let level = level_for(
+                        &self.video,
+                        &self.levels,
+                        &folder,
+                        &key.version,
+                        largest,
+                        fits,
+                    );
                     let play = match level.target(largest) {
                         None => Ok(Some((path.clone(), None))),
                         Some(t) => {
@@ -501,15 +517,24 @@ impl Worker {
                 .map(|o| o.pixel_size())
                 .max_by_key(|s| u64::from(s.width) * u64::from(s.height))
                 .unwrap_or(Size::new(1920, 1080));
+            let key = (shown.folder.clone(), shown.version.clone());
+            let fits = self.fits_saver.get(&key).copied().unwrap_or(false);
             let current = level_for(
                 &self.video,
                 &self.levels,
                 &shown.folder,
                 &shown.version,
                 largest,
+                fits,
             );
-            let (_, cap) = self.video.saver.levels(self.video.no_real_gpu);
-            let Some(next) = current.next().filter(|n| *n <= cap) else {
+            let (start, cap) = self.video.saver.levels(self.video.no_real_gpu);
+            // Un original que ya era de ahorro y no se ve pasa directo a la copia de ahorro.
+            let next = if current == CopyLevel::Original && start == CopyLevel::Saver {
+                Some(CopyLevel::Saver)
+            } else {
+                current.next()
+            };
+            let Some(next) = next.filter(|n| *n <= cap) else {
                 continue;
             };
             tracing::info!(output = %output, folder = %shown.folder, problem = %problem,
@@ -582,21 +607,51 @@ impl Worker {
     }
 }
 
+/// ¿El video ya es como la copia de ahorro? Solo se lee cuando se empezaría por ella, y una
+/// vez por versión del fondo.
+fn fits_saver(
+    video: &VideoOptions,
+    cache: &mut HashMap<(String, String), bool>,
+    folder: &str,
+    version: &str,
+    path: &Path,
+) -> bool {
+    let (start, _) = video.saver.levels(video.no_real_gpu);
+    if start != CopyLevel::Saver {
+        return false;
+    }
+    let key = (folder.to_string(), version.to_string());
+    if let Some(f) = cache.get(&key) {
+        return *f;
+    }
+    let info = copies::probe(video.ffmpeg.as_deref(), path);
+    let fits = info
+        .as_ref()
+        .is_some_and(|i| miraishin_core::copies::already_fits(i, &CopyTarget::SAVER));
+    tracing::info!(folder = %folder, info = ?info, fits, "video header read");
+    cache.insert(key, fits);
+    fits
+}
+
 /// Nivel con que se muestra un video: el de inicio según el ajuste y la GPU, lo que ya subió
-/// en esta sesión, o una copia que ya existe de antes (sin pasar del máximo).
+/// en esta sesión, o una copia que ya existe de antes (sin pasar del máximo). Si se
+/// empezaría por la copia de ahorro pero el video ya es así (`fits_saver`), el original.
 fn level_for(
     video: &VideoOptions,
     levels: &HashMap<(String, String), CopyLevel>,
     folder: &str,
     version: &str,
     largest: Size,
+    fits_saver: bool,
 ) -> CopyLevel {
-    let (start, cap) = video.saver.levels(video.no_real_gpu);
-    let mut level = levels
+    let (mut start, cap) = video.saver.levels(video.no_real_gpu);
+    let raised = levels
         .get(&(folder.to_string(), version.to_string()))
-        .copied()
-        .unwrap_or(start)
-        .max(start);
+        .copied();
+    if start == CopyLevel::Saver && fits_saver && raised.is_none() {
+        start = CopyLevel::Original;
+    }
+    let mut level = raised.unwrap_or(start).max(start);
     for l in [CopyLevel::Screen, CopyLevel::Saver] {
         if l > level
             && l <= cap

@@ -5,6 +5,7 @@
 //!
 //! Hay tres niveles y se sube de a uno cuando el nivel actual no se ve bien:
 //! original → copia del tamaño de la pantalla → copia de ahorro (720p, 30 cuadros).
+//! Un video que ya es como la copia de ahorro (`already_fits`) empieza por el original.
 //! Aquí solo están las reglas; crear el archivo lo hace el daemon con `ffmpeg`.
 
 use std::ffi::OsString;
@@ -220,6 +221,74 @@ pub fn ffmpeg_args(input: &Path, output: &Path, t: &CopyTarget) -> Vec<OsString>
     args
 }
 
+/// Lo que importa de un video para decidir si necesita copia: códec, tamaño y cuadros.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VideoInfo {
+    pub codec: String,
+    pub width: u32,
+    pub height: u32,
+    pub fps: f64,
+}
+
+/// Argumentos para leer solo la cabecera del video (`ffmpeg -i`, sin salida: termina con
+/// error, pero antes escribe los flujos en la salida de errores).
+pub fn probe_args(input: &Path) -> Vec<OsString> {
+    let mut args: Vec<OsString> = ["-nostdin", "-hide_banner", "-i"]
+        .iter()
+        .map(OsString::from)
+        .collect();
+    args.push(input.as_os_str().to_owned());
+    args
+}
+
+/// Lee el primer flujo de video de lo que `ffmpeg -i` escribe:
+/// `Stream #0:0…: Video: h264 (High) (avc1 / 0x31637661), yuv420p(…), 1280x720 […], 30 fps, …`.
+/// Las portadas (`attached pic`) no cuentan.
+pub fn parse_video_info(text: &str) -> Option<VideoInfo> {
+    let line = text
+        .lines()
+        .find(|l| l.contains("Stream #") && l.contains("Video:") && !l.contains("attached pic"))?;
+    let rest = line.split_once("Video:")?.1;
+    let codec = rest
+        .split_whitespace()
+        .next()?
+        .trim_end_matches(',')
+        .to_string();
+    let parts: Vec<&str> = rest.split(',').map(str::trim).collect();
+    let (width, height) = parts.iter().skip(1).find_map(|p| {
+        let (w, h) = p.split_whitespace().next()?.split_once('x')?;
+        let (w, h) = (w.parse::<u32>().ok()?, h.parse::<u32>().ok()?);
+        (w > 0 && h > 0).then_some((w, h))
+    })?;
+    let rate = |suffix: &str| {
+        parts.iter().find_map(|p| {
+            p.strip_suffix(suffix)
+                .and_then(|n| n.trim().parse::<f64>().ok())
+        })
+    };
+    let fps = rate(" fps").or_else(|| rate(" tbr"))?;
+    Some(VideoInfo {
+        codec,
+        width,
+        height,
+        fps,
+    })
+}
+
+/// Códecs que se ven en todas partes sin copia (el de la copia es VP9). HEVC no: Plasma de
+/// Nobara no lo trae, y ahí se vio gris.
+const COMMON_CODECS: &[&str] = &["h264", "vp8", "vp9", "av1"];
+
+/// ¿El video ya es como su copia de `target` (no más grande, no más cuadros, códec común)?
+/// Entonces convertirlo no ganaría nada: se reproduce el original, y solo si la superficie
+/// dice que no se ve se hace la copia.
+pub fn already_fits(info: &VideoInfo, target: &CopyTarget) -> bool {
+    COMMON_CODECS.contains(&info.codec.as_str())
+        && info.width <= target.max_width
+        && info.height <= target.max_height
+        && info.fps <= f64::from(target.fps_cap) + 0.01
+}
+
 /// Duración del video en microsegundos, de la línea `  Duration: 00:01:02.50, …` que
 /// `ffmpeg` escribe al abrirlo.
 pub fn parse_duration_us(line: &str) -> Option<u64> {
@@ -333,5 +402,56 @@ mod tests {
         assert_eq!(percent(10, 20), 50);
         assert_eq!(percent(30, 20), 99);
         assert_eq!(percent(5, 0), 0);
+    }
+
+    #[test]
+    fn videos_que_ya_caben() {
+        let h264 = "  Stream #0:0[0x1](und): Video: h264 (High 4:4:4 Predictive) (avc1 / 0x31637661), yuv444p(progressive), 1280x720 [SAR 1:1 DAR 16:9], 140 kb/s, 30 fps, 30 tbr, 15360 tbn (default)";
+        let vp9 = "  Stream #0:0: Video: vp9 (Profile 1), gbrp(pc, gbr/unknown/unknown, progressive), 640x360, SAR 1:1 DAR 16:9, 29.97 fps, 29.97 tbr, 1k tbn";
+        let hevc = "  Stream #0:0: Video: hevc (Rext), gbrp(pc, gbr/unknown/unknown, progressive), 1280x720 [SAR 1:1 DAR 16:9], 30 fps, 30 tbr, 1k tbn";
+        let vertical = "  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(progressive), 720x1280 [SAR 1:1 DAR 9:16], 128 kb/s, 60 fps, 60 tbr, 15360 tbn (default)";
+        let solo_tbr = "  Stream #0:0: Video: vp8, yuv420p(progressive), 1280x720, 25 tbr, 1k tbn";
+        let portada = "  Stream #0:1: Video: mjpeg (Baseline), yuvj420p(pc), 600x600, 90k tbr, 90k tbn (attached pic)";
+
+        let i = parse_video_info(&format!("Input #0, mov\n{h264}\n")).unwrap();
+        assert_eq!(
+            (i.codec.as_str(), i.width, i.height, i.fps),
+            ("h264", 1280, 720, 30.0)
+        );
+        assert!(already_fits(&i, &CopyTarget::SAVER));
+
+        let i = parse_video_info(vp9).unwrap();
+        assert_eq!((i.width, i.height), (640, 360));
+        assert!(
+            already_fits(&i, &CopyTarget::SAVER),
+            "29,97 cuadros caben en 30"
+        );
+
+        let i = parse_video_info(hevc).unwrap();
+        assert!(
+            !already_fits(&i, &CopyTarget::SAVER),
+            "HEVC siempre se copia"
+        );
+
+        let i = parse_video_info(vertical).unwrap();
+        assert_eq!((i.width, i.height, i.fps), (720, 1280, 60.0));
+        assert!(!already_fits(&i, &CopyTarget::SAVER));
+
+        assert_eq!(parse_video_info(solo_tbr).unwrap().fps, 25.0);
+        assert_eq!(parse_video_info(portada), None);
+        assert_eq!(
+            parse_video_info(&format!("{portada}\n{vp9}"))
+                .unwrap()
+                .codec,
+            "vp9"
+        );
+        assert_eq!(
+            parse_video_info("Invalid data found when processing input"),
+            None
+        );
+
+        let a = probe_args(Path::new("/v/olas.mp4"));
+        assert_eq!(a.last().unwrap(), "/v/olas.mp4");
+        assert_eq!(a[0], "-nostdin");
     }
 }

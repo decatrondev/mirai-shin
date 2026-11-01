@@ -478,11 +478,30 @@ fn test_video_env() -> miraishin_daemon::VideoEnv {
 }
 
 /// `ffmpeg` falso: escribe la duración y el avance como el de verdad y crea el archivo de
-/// salida (el último argumento). Con `falla` sale con error.
+/// salida (el último argumento). Con `falla` sale con error. Sin `-progress` (leer la
+/// cabecera) escribe el flujo de un video 1080p30 H.264.
 #[cfg(unix)]
 fn fake_ffmpeg(dir: &std::path::Path, falla: bool) -> std::path::PathBuf {
+    fake_ffmpeg_with(dir, falla, "1920x1080", "h264")
+}
+
+#[cfg(unix)]
+fn fake_ffmpeg_with(
+    dir: &std::path::Path,
+    falla: bool,
+    size: &str,
+    codec: &str,
+) -> std::path::PathBuf {
     use std::os::unix::fs::PermissionsExt;
-    let p = dir.join(if falla { "ffmpeg-malo" } else { "ffmpeg" });
+    let p = dir.join(format!(
+        "ffmpeg-{}-{size}-{codec}",
+        if falla { "malo" } else { "bueno" }
+    ));
+    let probe = format!(
+        "case \"$*\" in *-progress*) ;; *) echo '  Stream #0:0: Video: {codec} (High), \
+         yuv420p(progressive), {size} [SAR 1:1 DAR 16:9], 30 fps, 30 tbr, 15360 tbn' >&2; \
+         exit 1;; esac\n"
+    );
     let body = if falla {
         "echo 'Invalid data found' >&2\nexit 1\n".to_string()
     } else {
@@ -490,7 +509,7 @@ fn fake_ffmpeg(dir: &std::path::Path, falla: bool) -> std::path::PathBuf {
          for a in \"$@\"; do last=\"$a\"; done\nprintf webm > \"$last\"\necho progress=end\n"
             .to_string()
     };
-    std::fs::write(&p, format!("#!/bin/sh\n{body}")).unwrap();
+    std::fs::write(&p, format!("#!/bin/sh\n{probe}{body}")).unwrap();
     std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
     p
 }
@@ -607,5 +626,47 @@ async fn copias_compatibles() {
     let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
     assert_eq!(list["items"][0]["problem"], json!("copy_failed"));
     assert_eq!(playing(&screen, "DP-1"), None);
+    stop(c, task).await;
+
+    // 4. Sin GPU real, pero el video ya es de ahorro (720p30 H.264): el original, sin copia.
+    //    Si la superficie dice que no se ve, directo a la copia de ahorro.
+    std::fs::remove_dir_all(&dir).ok();
+    let screen: Shared = Arc::new(Mutex::new(Screen {
+        outputs: vec![out("DP-1", 10, 10, 120)],
+        plays_video: true,
+        ..Screen::default()
+    }));
+    let ffmpeg = fake_ffmpeg_with(t.path(), false, "1280x720", "h264");
+    let task = start_with(&paths, &ep, &screen, env(true, ffmpeg));
+    let mut c = connect(&ep).await;
+    let original = wall.join("olas/v.mp4").to_string_lossy().into_owned();
+    wait_for(|| playing(&screen, "DP-1").as_deref() == Some(original.as_str())).await;
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(list["items"][0]["copy"], Value::Null);
+    assert!(!dir.exists(), "no se creó ninguna copia");
+    screen
+        .lock()
+        .unwrap()
+        .video_problems
+        .insert("DP-1".into(), "video_too_slow".into());
+    wait_for(|| playing(&screen, "DP-1").is_some_and(|p| p.contains("1280x720-30-"))).await;
+    {
+        let h = &screen.lock().unwrap().history;
+        assert_eq!(h.len(), 2, "sin pasar por la copia de pantalla: {h:?}");
+    }
+    stop(c, task).await;
+
+    // 5. Sin GPU real y 720p en HEVC: se copia igual (Plasma de algunas distros no lo trae).
+    std::fs::remove_dir_all(&dir).ok();
+    let screen: Shared = Arc::new(Mutex::new(Screen {
+        outputs: vec![out("DP-1", 10, 10, 120)],
+        plays_video: true,
+        ..Screen::default()
+    }));
+    let ffmpeg = fake_ffmpeg_with(t.path(), false, "1280x720", "hevc");
+    let task = start_with(&paths, &ep, &screen, env(true, ffmpeg));
+    let c = connect(&ep).await;
+    wait_for(|| playing(&screen, "DP-1").is_some_and(|p| p.contains("1280x720-30-"))).await;
+    assert_eq!(screen.lock().unwrap().history.len(), 1);
     stop(c, task).await;
 }

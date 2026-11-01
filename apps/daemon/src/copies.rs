@@ -9,7 +9,7 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use miraishin_core::copies::{self, CopyTarget};
+use miraishin_core::copies::{self, CopyTarget, VideoInfo};
 
 /// Dónde está la copia de un fondo para un destino.
 pub fn copy_path(copies_dir: &Path, folder: &str, version: &str, target: &CopyTarget) -> PathBuf {
@@ -62,6 +62,40 @@ pub fn find_ffmpeg() -> Option<PathBuf> {
             .map(|d| d.join(name))
             .find(|p| p.is_file())
     })
+}
+
+/// Lee códec, tamaño y cuadros del video con `ffmpeg -i` (solo la cabecera, como mucho 5 s).
+/// `None` si no hay `ffmpeg` o no se entiende: entonces se sigue como si necesitara copia.
+pub fn probe(ffmpeg: Option<&Path>, input: &Path) -> Option<VideoInfo> {
+    let mut child = Command::new(ffmpeg?)
+        .args(copies::probe_args(input))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .ok()?;
+    let stderr = child.stderr.take()?;
+    let reader = std::thread::spawn(move || {
+        let mut text = String::new();
+        let _ = std::io::Read::read_to_string(&mut BufReader::new(stderr), &mut text);
+        text
+    });
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                tracing::warn!(file = %input.display(), "reading the video header took too long");
+                return None;
+            }
+        }
+    }
+    copies::parse_video_info(&reader.join().ok()?)
 }
 
 /// Crea la copia (bloquea: se llama desde un hilo propio). `progress` recibe el porcentaje.
