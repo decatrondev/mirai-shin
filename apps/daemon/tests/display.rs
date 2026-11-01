@@ -495,6 +495,7 @@ fn fake_ffmpeg(dir: &std::path::Path, falla: bool) -> std::path::PathBuf {
     p
 }
 
+#[cfg(unix)]
 fn playing(screen: &Shared, output: &str) -> Option<String> {
     let s = screen.lock().unwrap();
     s.videos
