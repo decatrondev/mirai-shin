@@ -185,7 +185,8 @@ cp "$WORK/libplacebo/LICENSE" "$DIST/licenses/libplacebo/"
 cp "$WORK/mpv/LICENSE.LGPL" "$WORK/mpv/Copyright" "$DIST/licenses/mpv/"
 
 ls "$DIST"
-for need in libmpv-2.dll ffmpeg.exe avcodec-61.dll avformat-61.dll avutil-59.dll '*ass*.dll' '*placebo*.dll'; do
+for need in libmpv-2.dll ffmpeg.exe avcodec-61.dll avformat-61.dll avutil-59.dll '*placebo*.dll'; do
+  # libass queda dentro de libmpv-2.dll (se compila estática); su licencia va en licenses/.
   compgen -G "$DIST/$need" > /dev/null || { echo "Falta $need en dist/"; exit 1; }
 done
 strip --strip-unneeded "$DIST"/*.dll "$DIST"/*.exe
