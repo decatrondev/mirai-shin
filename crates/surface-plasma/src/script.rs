@@ -68,6 +68,32 @@ if (!d) {{ print(\"no_desktop\"); }} else {{
     )
 }
 
+/// Lee el estado que el complemento dejó en su configuración para el monitor `output`
+/// (`Status`, ver `main.qml`). Imprime `status:<valor>` o `none` si ahí no está el nuestro.
+pub fn read_status(output: &str, plugin_id: &str) -> String {
+    format!(
+        "var s = screenForConnector({out});
+var d = s >= 0 ? desktopForScreen(s) : undefined;
+if (!d || d.wallpaperPlugin != {id}) {{ print(\"none\"); }} else {{
+  d.currentConfigGroup = [\"Wallpaper\", {id}, \"General\"];
+  print(\"status:\" + d.readConfig(\"Status\"));
+}}",
+        out = lit(output),
+        id = lit(plugin_id),
+    )
+}
+
+/// De la respuesta de `read_status`, el código del problema si el complemento informó uno
+/// (`video_…`). `loading`, `playing`, vacío o algo raro → `None`. Solo deja pasar letras
+/// minúsculas y `_`: el código termina en un texto de `ctl`.
+pub fn parse_status(reply: &str) -> Option<String> {
+    let value = reply.trim().strip_prefix("status:")?;
+    let ok = value.starts_with("video_")
+        && value.len() <= 40
+        && value.bytes().all(|b| b.is_ascii_lowercase() || b == b'_');
+    ok.then(|| value.to_string())
+}
+
 /// Lee la respuesta de `show`/`clear`: `Ok(tipo anterior)` o el código del problema.
 pub fn parse(reply: &str) -> Result<String, String> {
     let reply = reply.trim();
@@ -136,6 +162,35 @@ mod tests {
         assert_eq!(parse("ok:"), Ok(String::new()));
         assert_eq!(parse("no_desktop"), Err("kde_no_desktop".into()));
         assert_eq!(parse("TypeError: x"), Err("kde_script_failed".into()));
+    }
+
+    #[test]
+    fn estado_del_complemento() {
+        let js = read_status("DP-1", "net.x.Y");
+        assert!(js.contains(r#"screenForConnector("DP-1")"#));
+        assert!(js.contains(r#"d.wallpaperPlugin != "net.x.Y""#));
+        assert!(js.contains(r#"d.readConfig("Status")"#));
+        assert_eq!(
+            parse_status("status:video_no_decoder\n"),
+            Some("video_no_decoder".into())
+        );
+        assert_eq!(
+            parse_status("status:video_too_slow"),
+            Some("video_too_slow".into())
+        );
+        for nada in [
+            "status:playing",
+            "status:loading",
+            "status:",
+            "status:undefined",
+            "none",
+            "",
+            "status:video_x; rm",
+            "status:video_ÑO",
+            "TypeError: x",
+        ] {
+            assert_eq!(parse_status(nada), None, "{nada}");
+        }
     }
 
     #[test]

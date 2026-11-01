@@ -5,7 +5,7 @@
 //! Corre en su propio hilo, porque decodificar y escalar una imagen tarda (hasta ~1 s con
 //! una foto grande) y no debe frenar las respuestas del IPC. Habla con el resto por canales.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -70,6 +70,7 @@ impl Display {
             wallpapers_dir,
             events,
             shown: HashMap::new(),
+            videos: HashSet::new(),
             first: true,
         };
         let started = std::thread::Builder::new()
@@ -135,6 +136,9 @@ struct Worker {
     wallpapers_dir: PathBuf,
     events: broadcast::Sender<Event>,
     shown: HashMap<String, Shown>,
+    /// Monitores con un video puesto: en `outputs` se le pregunta a la superficie si de
+    /// verdad se ve (en KDE lo sabe Plasma, después de `show_video`).
+    videos: HashSet<String>,
     /// En la primera pasada se quita el fondo de los monitores sin nada elegido: en KDE el
     /// de una sesión anterior sigue puesto aunque el daemon se haya reiniciado.
     first: bool,
@@ -153,6 +157,7 @@ impl Worker {
                 Msg::Surface(e) => {
                     if let SurfaceEvent::OutputRemoved { name } = &e {
                         self.shown.remove(name);
+                        self.videos.remove(name);
                         tracing::info!(output = %name, "monitor removed");
                     } else {
                         tracing::info!(event = ?e, "monitor changed");
@@ -188,6 +193,7 @@ impl Worker {
 
         for output in &outputs {
             let Some((folder, mode)) = resolve(&assignments, &output.name) else {
+                self.videos.remove(&output.name);
                 if self.shown.remove(&output.name).is_some() || self.first {
                     let _ = surface.clear(&output.name);
                     changed = true;
@@ -226,6 +232,7 @@ impl Worker {
                             tracing::info!(output = %output.name, folder = %folder,
                                 mode = mode.as_str(), "video wallpaper shown");
                             self.shown.insert(output.name.clone(), key);
+                            self.videos.insert(output.name.clone());
                             changed = true;
                             continue;
                         }
@@ -263,6 +270,7 @@ impl Worker {
                         problem = ?problem, "wallpaper shown");
                     self.shown
                         .insert(output.name.clone(), Shown { problem, ..key });
+                    self.videos.remove(&output.name);
                     changed = true;
                 }
                 Err(e) => {
@@ -276,6 +284,7 @@ impl Worker {
         let present: Vec<&str> = outputs.iter().map(|o| o.name.as_str()).collect();
         self.shown
             .retain(|name, _| present.contains(&name.as_str()));
+        self.videos.retain(|name| present.contains(&name.as_str()));
         if changed {
             let _ = self
                 .events
@@ -297,6 +306,13 @@ impl Worker {
                 .map(|o| {
                     let px = o.pixel_size();
                     let shown = self.shown.get(&o.name);
+                    // Un video puesto puede no verse aunque la superficie lo aceptó.
+                    let problem = shown.and_then(|s| s.problem.clone()).or_else(|| {
+                        self.videos
+                            .contains(&o.name)
+                            .then(|| self.surface.as_ref()?.video_problem(&o.name))
+                            .flatten()
+                    });
                     OutputItem {
                         name: o.name.clone(),
                         description: o.description.clone(),
@@ -307,7 +323,7 @@ impl Worker {
                         pixel_height: px.height,
                         wallpaper: shown.map(|s| s.folder.clone()),
                         mode: shown.map(|s| s.mode.as_str().to_string()),
-                        problem: shown.and_then(|s| s.problem.clone()),
+                        problem,
                     }
                 })
                 .collect(),

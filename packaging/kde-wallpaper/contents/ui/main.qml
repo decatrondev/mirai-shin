@@ -3,7 +3,13 @@
 // revisa nada a cada rato:
 // - `Image`: file:// de un cuadro fijo, ya al tamaño exacto del monitor.
 // - `Video` + `Mode`: file:// de un video que se reproduce aquí, en bucle y sin sonido, con
-//   el MediaPlayer de QtMultimedia (prueba 2.0). `Mode` = fill, fit, stretch o center.
+//   el MediaPlayer de QtMultimedia. `Mode` = fill, fit, stretch o center.
+// Y deja escrito para el daemon (lo lee por D-Bus):
+// - `Status`: estado del video: "" (sin video), `loading`, `playing`, o el código del problema
+//   (`video_no_decoder`, `video_unreadable`, `video_unplayable`, `video_no_frames`,
+//   `video_too_slow`).
+// - `Fps`: cuadros por segundo que de verdad llegan a la pantalla, y los que trae el video
+//   (se guarda solo cuando cambia bastante: cada escritura va al disco).
 import QtQuick
 import QtQuick.Window
 import QtMultimedia
@@ -46,11 +52,7 @@ WallpaperItem {
     }
 
     onWantedImageChanged: loadImage(wantedImage)
-    Component.onCompleted: {
-        loadImage(wantedImage);
-        if (wantedVideo !== "")
-            player.play();
-    }
+    Component.onCompleted: loadImage(wantedImage)
 
     Image {
         id: a
@@ -84,55 +86,200 @@ WallpaperItem {
 
     // ---- Video ----
 
-    // Tamaño real del video, para «centrar» (sin escalar).
-    property size videoSize: Qt.size(0, 0)
-    readonly property bool videoShown: wantedVideo !== "" && player.playing
-        && player.error === MediaPlayer.NoError
+    // Dos reproductores: el video nuevo arranca por detrás y recién cuando su primer cuadro
+    // llega a la pantalla reemplaza al viejo, para que al cambiar no quede un hueco negro.
+    // `current` es el que se ve (null si ninguno).
+    property var current: null
+    readonly property bool videoShown: current !== null
 
-    onVideoShownChanged: {
-        if (videoShown)
-            releaseImages();
+    // Lo que se escribe desde QML queda solo en memoria hasta `writeConfig()` (probado en
+    // Plasma 6 el 2026-11-01): sin eso el daemon no lo ve.
+    function save(key, value) {
+        if (root.configuration[key] === value)
+            return;
+        root.configuration[key] = value;
+        if (typeof root.configuration.writeConfig === "function")
+            root.configuration.writeConfig();
     }
 
-    Item {
-        anchors.fill: parent
-        clip: true
-        visible: root.videoShown
-
-        VideoOutput {
-            id: output
-            readonly property bool center: root.mode === "center" && root.videoSize.width > 0
-            anchors.centerIn: parent
-            width: center ? root.videoSize.width / Screen.devicePixelRatio : parent.width
-            height: center ? root.videoSize.height / Screen.devicePixelRatio : parent.height
-            fillMode: root.mode === "fit" ? VideoOutput.PreserveAspectFit
-                : root.mode === "fill" ? VideoOutput.PreserveAspectCrop
-                : VideoOutput.Stretch
-        }
+    function setStatus(s) {
+        if (root.configuration.Status !== s)
+            console.warn("Mirai Shin: status", s, root.wantedVideo);
+        save("Status", s);
     }
 
-    // Sin `audioOutput`: no se conecta ninguna salida de sonido.
-    MediaPlayer {
-        id: player
-        source: root.wantedVideo
-        loops: MediaPlayer.Infinite
-        videoOutput: output
-        onSourceChanged: {
-            root.videoSize = Qt.size(0, 0);
-            if (source.toString() !== "")
-                play();
-            else
-                stop();
+    function loadVideo(url) {
+        if (url === "") {
+            for (let i = 0; i < slots.count; i++)
+                slots.itemAt(i).unload();
+            root.current = null;
+            setStatus("");
+            save("Fps", "");
+            return;
         }
-        onMetaDataChanged: {
-            const r = metaData.value(MediaMetaData.Resolution);
-            if (r && r.width > 0)
-                root.videoSize = r;
-        }
-        onErrorOccurred: (error, errorString) => {
-            console.warn("Mirai Shin: video error", error, errorString, source);
-            // Se ve el grafito, no un cuadro viejo.
-            root.releaseImages();
+        if (slots.count < 2)
+            return; // Aún no se crearon: el Repeater lo vuelve a pedir al terminar.
+        const next = root.current === slots.itemAt(0) ? slots.itemAt(1) : slots.itemAt(0);
+        next.load(url);
+        save("Fps", "");
+        setStatus("loading");
+    }
+
+    // Llamado por el reproductor que acaba de mostrar su primer cuadro.
+    function promote(slot) {
+        if (slot.url !== root.wantedVideo)
+            return;
+        const old = root.current;
+        root.current = slot;
+        if (old && old !== slot)
+            old.unload();
+        releaseImages();
+        setStatus("playing");
+    }
+
+    // Llamado si el video pedido no se puede reproducir: queda el grafito (o la imagen, si
+    // el daemon ya mandó su primer cuadro) y el código para el daemon.
+    function fail(slot, code) {
+        if (slot.url !== root.wantedVideo)
+            return;
+        if (root.current && root.current !== slot)
+            root.current.unload();
+        root.current = null;
+        slot.unload();
+        // Se ve el grafito, no un cuadro de otro fondo (el daemon puede mandar el primer
+        // cuadro de este video como imagen después).
+        releaseImages();
+        setStatus(code);
+    }
+
+    onWantedVideoChanged: loadVideo(wantedVideo)
+
+    Repeater {
+        id: slots
+        model: 2
+        onCountChanged: if (count === 2) root.loadVideo(root.wantedVideo)
+
+        delegate: Item {
+            id: slot
+            property string url: ""
+            // Tamaño real del video, para «centrar» (sin escalar) y su ritmo de cuadros.
+            property size videoSize: Qt.size(0, 0)
+            property real videoFps: 0
+            property int frames: 0
+            property bool firstFrame: false
+            property int slowWindows: 0
+            property real savedFps: -100
+
+            anchors.fill: parent
+            clip: true
+            visible: root.current === slot
+
+            function load(u) {
+                unload();
+                url = u;
+                player.source = u;
+                player.play();
+                noFrames.restart();
+            }
+            function unload() {
+                noFrames.stop();
+                meter.stop();
+                player.stop();
+                player.source = "";
+                url = "";
+                videoSize = Qt.size(0, 0);
+                videoFps = 0;
+                frames = 0;
+                firstFrame = false;
+                slowWindows = 0;
+                savedFps = -100;
+            }
+
+            VideoOutput {
+                id: output
+                readonly property bool center: root.mode === "center" && slot.videoSize.width > 0
+                anchors.centerIn: parent
+                width: center ? slot.videoSize.width / Screen.devicePixelRatio : parent.width
+                height: center ? slot.videoSize.height / Screen.devicePixelRatio : parent.height
+                fillMode: root.mode === "fit" ? VideoOutput.PreserveAspectFit
+                    : root.mode === "fill" ? VideoOutput.PreserveAspectCrop
+                    : VideoOutput.Stretch
+            }
+
+            // Cada cuadro que de verdad llega a la pantalla.
+            Connections {
+                target: output.videoSink
+                function onVideoFrameChanged() {
+                    if (slot.url === "")
+                        return;
+                    slot.frames++;
+                    if (!slot.firstFrame) {
+                        slot.firstFrame = true;
+                        noFrames.stop();
+                        slot.frames = 0;
+                        meter.restart();
+                        root.promote(slot);
+                    }
+                }
+            }
+
+            // Sin un solo cuadro en este tiempo (y sin error): el equipo no lo puede mostrar.
+            Timer {
+                id: noFrames
+                interval: 10000
+                onTriggered: root.fail(slot, "video_no_frames")
+            }
+
+            // Cada 5 s: cuántos cuadros llegaron contra los que trae el video. Si dos veces
+            // seguidas llega menos del 80 % **y** menos de 24 por segundo, el equipo no da
+            // abasto (se ve a saltos). Medido en VMware el 2026-11-01: 17,8 de 30 se ve lento;
+            // 35 de 60 se ve fluido (importan los cuadros por segundo, no el porcentaje).
+            Timer {
+                id: meter
+                interval: 5000
+                repeat: true
+                onTriggered: {
+                    const got = slot.frames / (interval / 1000);
+                    slot.frames = 0;
+                    // Se guarda solo si cambió más de un 20 % (cada escritura va al disco).
+                    if (root.current === slot
+                            && Math.abs(got - slot.savedFps) > Math.max(1, slot.savedFps * 0.2)) {
+                        slot.savedFps = got;
+                        root.save("Fps", got.toFixed(1) + "/" + slot.videoFps.toFixed(1));
+                    }
+                    if (slot.videoFps > 0 && got < slot.videoFps * 0.8 && got < 24) {
+                        slot.slowWindows++;
+                        if (slot.slowWindows === 2 && root.current === slot)
+                            root.setStatus("video_too_slow");
+                    } else {
+                        slot.slowWindows = 0;
+                        if (root.current === slot && root.configuration.Status === "video_too_slow")
+                            root.setStatus("playing");
+                    }
+                }
+            }
+
+            // Sin `audioOutput`: no se conecta ninguna salida de sonido.
+            MediaPlayer {
+                id: player
+                loops: MediaPlayer.Infinite
+                videoOutput: output
+                onMetaDataChanged: {
+                    const r = metaData.value(MediaMetaData.Resolution);
+                    if (r && r.width > 0)
+                        slot.videoSize = r;
+                    const f = metaData.value(MediaMetaData.VideoFrameRate);
+                    if (f > 0)
+                        slot.videoFps = f;
+                }
+                onErrorOccurred: (error, errorString) => {
+                    console.warn("Mirai Shin: video error", error, errorString, source);
+                    const code = error === MediaPlayer.FormatError ? "video_no_decoder"
+                        : error === MediaPlayer.ResourceError ? "video_unreadable"
+                        : "video_unplayable";
+                    root.fail(slot, code);
+                }
+            }
         }
     }
 }

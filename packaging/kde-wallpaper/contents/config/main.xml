@@ -5,7 +5,7 @@
       http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
   <kcfgfile name=""/>
   <group name="General">
-    <!-- Todo lo escribe el daemon. Image: file:// del cuadro fijo de esta pantalla. -->
+    <!-- Image, Video y Mode los escribe el daemon. Image: file:// del cuadro fijo de esta pantalla. -->
     <entry name="Image" type="String">
       <default></default>
     </entry>
@@ -16,6 +16,14 @@
     <!-- Mode: encuadre del video (fill, fit, stretch, center). -->
     <entry name="Mode" type="String">
       <default>fill</default>
+    </entry>
+    <!-- Status: lo escribe el complemento para el daemon (loading, playing o código del problema). -->
+    <entry name="Status" type="String">
+      <default></default>
+    </entry>
+    <!-- Fps: cuadros por segundo que llegan a la pantalla / los del video (p. ej. 29.8/30.0). -->
+    <entry name="Fps" type="String">
+      <default></default>
     </entry>
   </group>
 </kcfg>

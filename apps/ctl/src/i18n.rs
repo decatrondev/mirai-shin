@@ -75,6 +75,12 @@ const TEXTS: &[(&str, &str, &str)] = &[
     ("problem_video_gl_failed",
      "{}: el reproductor de video no pudo usar la tarjeta gráfica. Se ve el color de respaldo",
      "{}: the video player could not use the graphics card. The fallback color shows"),
+    ("problem_video_no_frames",
+     "{}: el video se abrió, pero en 10 segundos no llegó ni un cuadro a la pantalla: este equipo no lo puede mostrar. No es un error de la app: pasa en máquinas virtuales o sin el controlador de la tarjeta gráfica. Prueba con un video de menor resolución (por ejemplo 720p). Se ve el color de respaldo",
+     "{}: the video opened, but not a single frame reached the screen in 10 seconds: this computer cannot show it. This is not an error in the app: it happens in virtual machines or without the graphics card driver. Try a lower-resolution video (for example 720p). The fallback color shows"),
+    ("problem_video_too_slow",
+     "{}: este equipo no da abasto con el video (llegan bastante menos cuadros de los que trae el video, así que se ve a saltos). No es un error de la app: pasa en máquinas virtuales o sin decodificación por la tarjeta gráfica. Prueba con un video de menor resolución (por ejemplo 720p)",
+     "{}: this computer cannot keep up with the video (far fewer frames arrive than the video has, so it stutters). This is not an error in the app: it happens in virtual machines or without decoding on the graphics card. Try a lower-resolution video (for example 720p)"),
     ("outputs_empty", "sin fondo", "no wallpaper"),
     ("unknown_command", "Comando desconocido: {}", "Unknown command: {}"),
     ("not_running",
@@ -157,6 +163,8 @@ mod tests {
             "video_unplayable",
             "video_unreadable",
             "video_gl_failed",
+            "video_no_frames",
+            "video_too_slow",
         ] {
             let key = format!("problem_{code}");
             assert!(!t(Language::Es, &key).is_empty(), "{key}");

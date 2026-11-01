@@ -1,6 +1,6 @@
 //! `PlasmaSurface`: cumple el contrato `Surface` pasándole los cuadros a Plasma.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 
@@ -24,6 +24,8 @@ pub struct PlasmaSurface {
     previous: HashMap<String, String>,
     /// Archivo del cuadro que muestra cada monitor (se borra al cambiar o quitar).
     current: HashMap<String, PathBuf>,
+    /// Monitores donde se pidió un video (solo a esos se les pregunta su estado).
+    videos: HashSet<String>,
     counter: u64,
 }
 
@@ -56,6 +58,7 @@ impl PlasmaSurface {
             frames_dir,
             previous,
             current: HashMap::new(),
+            videos: HashSet::new(),
             counter: 0,
         };
         surface.forget_old_frames();
@@ -136,6 +139,7 @@ impl Surface for PlasmaSurface {
         let entries = script::image_entries(&script::file_url(&path));
         match self.put(output, &entries) {
             Ok(()) => {
+                self.videos.remove(output);
                 if let Some(old) = self.current.insert(output.to_string(), path) {
                     let _ = std::fs::remove_file(old);
                 }
@@ -159,6 +163,7 @@ impl Surface for PlasmaSurface {
         self.output(output)?;
         let entries = script::video_entries(&script::file_url(video), mode.as_str());
         self.put(output, &entries)?;
+        self.videos.insert(output.to_string());
         // El PNG anterior ya no hace falta: el complemento suelta la imagen al ver el video.
         if let Some(old) = self.current.remove(output) {
             let _ = std::fs::remove_file(old);
@@ -166,7 +171,22 @@ impl Surface for PlasmaSurface {
         Ok(())
     }
 
+    /// El complemento deja su estado en la configuración (`Status`); se lee por D-Bus solo
+    /// cuando alguien lo pide (`outputs`), no a cada rato.
+    fn video_problem(&self, output: &str) -> Option<String> {
+        if !self.videos.contains(output) {
+            return None;
+        }
+        let reply = eval(
+            &self.dbus,
+            &script::read_status(output, package::plugin_id()),
+        )
+        .ok()?;
+        script::parse_status(&reply)
+    }
+
     fn clear(&mut self, output: &str) -> Result<(), SurfaceError> {
+        self.videos.remove(output);
         let restore = self
             .previous
             .get(output)

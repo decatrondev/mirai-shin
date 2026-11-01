@@ -20,6 +20,8 @@ struct Screen {
     /// Videos en reproducción (solo si `plays_video`).
     videos: HashMap<String, (std::path::PathBuf, FitMode)>,
     plays_video: bool,
+    /// Lo que la superficie sabe después de `show_video` (en KDE lo informa Plasma).
+    video_problems: HashMap<String, String>,
     sink: Option<EventSink>,
 }
 
@@ -60,6 +62,9 @@ impl Surface for FakeSurface {
         s.frames.remove(output);
         s.videos.insert(output.into(), (video.to_path_buf(), mode));
         Ok(())
+    }
+    fn video_problem(&self, output: &str) -> Option<String> {
+        self.0.lock().unwrap().video_problems.get(output).cloned()
     }
     fn clear(&mut self, output: &str) -> Result<(), SurfaceError> {
         let mut s = self.0.lock().unwrap();
@@ -382,6 +387,18 @@ async fn videos() {
         assert!(s.frames.is_empty());
     }
 
+    // La superficie aceptó el video pero después supo que no se ve (Plasma sin el
+    // decodificador): `outputs` lo dice, sin volver a mandarlo.
+    screen
+        .lock()
+        .unwrap()
+        .video_problems
+        .insert("DP-2".into(), "video_no_decoder".into());
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(list["items"][0]["problem"], Value::Null);
+    assert_eq!(list["items"][1]["problem"], json!("video_no_decoder"));
+    assert_eq!(list["items"][1]["wallpaper"], json!("olas"));
+
     // Imagen en un monitor: ese deja el video.
     c.call(
         methods::WALLPAPER_SET,
@@ -391,6 +408,15 @@ async fn videos() {
     .unwrap();
     assert_eq!(color(&screen, "DP-1"), Some(BLUE));
     assert!(!screen.lock().unwrap().videos.contains_key("DP-1"));
+    // Con una imagen no se le pregunta por el video (aunque la superficie dijera algo).
+    screen
+        .lock()
+        .unwrap()
+        .video_problems
+        .insert("DP-1".into(), "video_too_slow".into());
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(list["items"][0]["problem"], Value::Null);
+    screen.lock().unwrap().video_problems.clear();
     assert!(screen.lock().unwrap().videos.contains_key("DP-2"));
 
     // El archivo desaparece sin rescan: respaldo con su código.

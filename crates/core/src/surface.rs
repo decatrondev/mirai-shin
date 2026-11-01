@@ -209,6 +209,15 @@ pub trait Surface: Send {
         Err(SurfaceError::VideoUnsupported)
     }
 
+    /// Si el video que se pidió en `output` no se está viendo bien, el código de por qué
+    /// (`video_no_decoder`, `video_no_frames`, `video_too_slow`…). Sirve para las superficies
+    /// donde el video lo reproduce otro programa y el problema se sabe después de
+    /// `show_video` (KDE: Plasma). `None` = se ve, o la superficie no lo puede saber.
+    fn video_problem(&self, output: &str) -> Option<String> {
+        let _ = output;
+        None
+    }
+
     /// Quita el fondo de un monitor (vuelve a verse el del sistema).
     fn clear(&mut self, output: &str) -> Result<(), SurfaceError>;
 }
