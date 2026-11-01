@@ -1,4 +1,4 @@
-# Flatpak de DESARROLLO (fase 1): daemon, ctl y la prueba de capa de fondo.
+# Flatpak de DESARROLLO (fases 1 y 2): daemon, ctl, la prueba de capa de fondo y libmpv.
 # Para Flathub (fase 6) se cambia la compilación con red por fuentes fijas (cargo-sources.json).
 id: net.decatron.MiraiShin
 runtime: org.freedesktop.Platform
@@ -14,11 +14,117 @@ finish-args:
   # complemento de fondo; solo esa carpeta de Plasma, nada más de ~/.local/share.
   - --talk-name=org.kde.plasmashell
   - --filesystem=xdg-data/plasma/wallpapers:create
+  # Video en Sway/Hyprland (fase 2): la GPU para dibujar (EGL) y decodificar (VA-API).
+  - --device=dri
 build-options:
   append-path: /usr/lib/sdk/rust-stable/bin
   env:
     CARGO_HOME: /run/build/miraishin/cargo
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /share/doc
+  - /share/man
+  - '*.a'
+  - '*.la'
 modules:
+  # ---- Video (fase 2.5): todo LGPL. El FFmpeg del runtime no trae H.264/HEVC y el de
+  # codecs-extra es GPL, así que va uno propio, solo para decodificar.
+  - name: ffmpeg
+    config-opts:
+      - --enable-shared
+      - --disable-static
+      - --disable-programs
+      - --disable-doc
+      - --disable-encoders
+      - --disable-muxers
+      - --disable-avdevice
+      - --disable-network
+      - --disable-sdl2
+      - --disable-xlib
+      - --disable-libxcb
+      - --disable-vdpau
+      - --enable-vaapi
+      - --enable-libdrm
+      - --enable-libdav1d
+    sources:
+      - type: archive
+        url: https://ffmpeg.org/releases/ffmpeg-7.1.2.tar.xz
+        sha256: 089bc60fb59d6aecc5d994ff530fd0dcb3ee39aa55867849a2bbc4e555f9c304
+
+  - name: libass
+    buildsystem: meson
+    config-opts:
+      - --libdir=lib
+      - -Dtest=disabled
+      - -Dprofile=disabled
+      - -Dfontconfig=enabled
+    sources:
+      - type: git
+        url: https://github.com/libass/libass.git
+        tag: 0.17.4
+        commit: bbb3c7f1570a4a021e52683f3fbdf74fe492ae84
+
+  - name: libplacebo
+    buildsystem: meson
+    config-opts:
+      - --libdir=lib
+      - -Dopengl=enabled
+      - -Dvulkan=disabled
+      - -Dshaderc=disabled
+      - -Dglslang=disabled
+      - -Dd3d11=disabled
+      - -Ddemos=false
+      - -Dtests=false
+      - -Dlcms=enabled
+    sources:
+      - type: git
+        url: https://code.videolan.org/videolan/libplacebo.git
+        tag: v7.387.0
+        commit: 275f7dea27924cdd34ab2e6c20e448b6bc4fab65
+
+  # mpv la pide con drm (necesario para VA-API por /dev/dri). MIT.
+  - name: libdisplay-info
+    buildsystem: meson
+    cleanup:
+      - /bin
+    config-opts:
+      - --libdir=lib
+    sources:
+      - type: git
+        url: https://gitlab.freedesktop.org/emersion/libdisplay-info.git
+        tag: 0.4.0
+        commit: c67a3e9bedb05ab61c7443704a1a107e76254595
+
+  - name: mpv
+    buildsystem: meson
+    config-opts:
+      - --libdir=lib
+      # LGPL: sin los archivos solo-GPL de mpv.
+      - -Dgpl=false
+      - -Dlibmpv=true
+      - -Dcplayer=false
+      - -Dauto_features=disabled
+      - -Dgl=enabled
+      - -Degl=enabled
+      - -Dwayland=enabled
+      - -Degl-wayland=enabled
+      - -Ddrm=enabled
+      - -Dvaapi=enabled
+      - -Dvaapi-drm=enabled
+      - -Dvaapi-wayland=enabled
+      - -Dzlib=enabled
+      - -Diconv=enabled
+      - -Dlcms2=enabled
+      - -Dmanpage-build=disabled
+      - -Dhtml-build=disabled
+      - -Dpdf-build=disabled
+    sources:
+      - type: git
+        url: https://github.com/mpv-player/mpv.git
+        tag: v0.41.0
+        commit: 41f6a645068483470267271e1d09966ca3b9f413
+
   - name: miraishin
     buildsystem: simple
     build-options:
