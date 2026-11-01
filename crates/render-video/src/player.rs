@@ -86,6 +86,20 @@ impl Player {
         Self::start(&options::mode(mode), wakeup)
     }
 
+    /// mpv dibuja solo, con su salida `gpu`, dentro de la ventana nativa `wid` (en Windows,
+    /// un `HWND`). Sin `attach_gl`: `load` ya se puede llamar. Es el camino B de la prueba
+    /// del 2.8 (`tools/win-video-probe`).
+    pub fn in_window(mode: FitMode, wid: i64, wakeup: Wakeup) -> Result<Self, VideoError> {
+        let wid = wid.to_string();
+        let mut extra: Vec<(&str, &str)> = options::mode(mode);
+        extra.push(("vo", "gpu"));
+        extra.push(("wid", &wid));
+        // Que la ventana de mpv no tome el cursor ni el teclado.
+        extra.push(("input-cursor", "no"));
+        extra.push(("cursor-autohide", "no"));
+        Self::start(&extra, wakeup)
+    }
+
     fn start(extra: &[(&str, &str)], wakeup: Wakeup) -> Result<Self, VideoError> {
         let api = ffi::api().ok_or(VideoError::MpvUnavailable)?;
         // SAFETY: llamadas según `client.h`; `handle` se comprueba antes de usarlo.

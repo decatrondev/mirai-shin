@@ -15,6 +15,7 @@ members = [
     "apps/daemon",
     "apps/ctl",
     "tools/layer-probe",
+    "tools/win-video-probe",
     "services/web",
 ]
 

@@ -65,3 +65,26 @@ jobs:
             target/release/miraishin-daemon.exe
             target/release/miraishin-ctl.exe
           retention-days: 14
+      # Prueba mínima del 2.8 (no se distribuye): video con libmpv en la ventana layered.
+      # La libmpv LGPL es la de zhongfly/mpv-winbuild, fijada por versión y hash, SOLO para
+      # esta prueba; la que se distribuya se compila en este CI con versiones fijas.
+      - name: Prueba de video en Windows (2.8)
+        if: runner.os == 'Windows' && github.event_name == 'push'
+        shell: bash
+        run: |
+          cargo build --release -p miraishin-win-video-probe
+          grep -q PerMonitorV2 target/release/miraishin-win-video-probe.exe
+          name=mpv-dev-lgpl-x86_64-20261101-git-add72571ea.7z
+          curl -sSfLO "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-11-01-add72571ea/$name"
+          echo "a05f80aa36faecc25af840dca3a24af0cd32fa42a114bf7ea91dc21a80376f6c  $name" | sha256sum -c
+          mkdir -p probe && 7z x -oprobe/mpv "$name" > /dev/null
+          ls -la probe/mpv
+          cp probe/mpv/libmpv-2.dll target/release/miraishin-win-video-probe.exe probe/
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows' && github.event_name == 'push'
+        with:
+          name: windows-video-probe
+          path: |
+            probe/miraishin-win-video-probe.exe
+            probe/libmpv-2.dll
+          retention-days: 14
