@@ -289,6 +289,14 @@ pub fn already_fits(info: &VideoInfo, target: &CopyTarget) -> bool {
         && info.fps <= f64::from(target.fps_cap) + 0.01
 }
 
+/// ¿`ffmpeg` no pudo abrir el video porque el archivo está roto (cortado, a medio bajar)?
+/// Se mira en sus últimas líneas de error.
+pub fn is_damaged_input(stderr_tail: &[String]) -> bool {
+    stderr_tail.iter().any(|l| {
+        l.contains("moov atom not found") || l.contains("Invalid data found when processing input")
+    })
+}
+
 /// Duración del video en microsegundos, de la línea `  Duration: 00:01:02.50, …` que
 /// `ffmpeg` escribe al abrirlo.
 pub fn parse_duration_us(line: &str) -> Option<u64> {
@@ -449,6 +457,13 @@ mod tests {
             parse_video_info("Invalid data found when processing input"),
             None
         );
+
+        let roto = [
+            "[mov,mp4,m4a,3gp,3g2,mj2 @ 0x55e4c0391840] moov atom not found".to_string(),
+            "Error opening input files: Invalid data found when processing input".to_string(),
+        ];
+        assert!(is_damaged_input(&roto));
+        assert!(!is_damaged_input(&["No space left on device".to_string()]));
 
         let a = probe_args(Path::new("/v/olas.mp4"));
         assert_eq!(a.last().unwrap(), "/v/olas.mp4");

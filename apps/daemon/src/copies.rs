@@ -100,7 +100,8 @@ pub fn probe(ffmpeg: Option<&Path>, input: &Path) -> Option<VideoInfo> {
 
 /// Crea la copia (bloquea: se llama desde un hilo propio). `progress` recibe el porcentaje.
 /// Devuelve el código del problema si falla: `copy_unavailable` (no hay `ffmpeg`),
-/// `copy_failed` (el video no se pudo convertir, o falta espacio).
+/// `video_damaged` (el archivo está roto: `ffmpeg` no lo puede abrir), `copy_failed` (no se
+/// pudo convertir por otra razón, por ejemplo falta espacio).
 pub fn make_copy(
     ffmpeg: Option<&Path>,
     input: &Path,
@@ -154,7 +155,11 @@ pub fn make_copy(
     if !status.success() {
         tracing::warn!(status = ?status.code(), last = ?tail.last(), "video copy failed");
         let _ = std::fs::remove_file(&part);
-        return Err("copy_failed");
+        return Err(if copies::is_damaged_input(&tail) {
+            "video_damaged"
+        } else {
+            "copy_failed"
+        });
     }
     std::fs::rename(&part, output).map_err(|_| {
         let _ = std::fs::remove_file(&part);

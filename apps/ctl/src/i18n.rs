@@ -89,8 +89,11 @@ const TEXTS: &[(&str, &str, &str)] = &[
      "{}: este equipo no da abasto con el video (llegan bastante menos cuadros de los que trae el video, así que se ve a saltos). No es un error de la app: pasa en máquinas virtuales o sin decodificación por la tarjeta gráfica. Prueba con un video de menor resolución (por ejemplo 720p)",
      "{}: this computer cannot keep up with the video (far fewer frames arrive than the video has, so it stutters). This is not an error in the app: it happens in virtual machines or without decoding on the graphics card. Try a lower-resolution video (for example 720p)"),
     ("problem_copy_failed",
-     "{}: este equipo no puede reproducir el video tal cual, y no se pudo crear una copia compatible (el video está dañado o falta espacio en disco). Se ve el color de respaldo; al volver a elegirlo se intenta otra vez",
-     "{}: this computer cannot play the video as it is, and a compatible copy could not be made (the video is damaged or the disk is full). The fallback color shows; choosing it again tries once more"),
+     "{}: este equipo no puede reproducir el video tal cual, y no se pudo crear una copia compatible (por ejemplo, falta espacio en disco). Se ve el color de respaldo; al volver a elegirlo se intenta otra vez",
+     "{}: this computer cannot play the video as it is, and a compatible copy could not be made (for example, the disk is full). The fallback color shows; choosing it again tries once more"),
+    ("problem_video_damaged",
+     "{}: el archivo del video está dañado o incompleto (por ejemplo, una descarga que se cortó), así que no se puede abrir. No es un error de la app ni del equipo: vuelve a bajar o copiar el video y elígelo otra vez. Se ve el color de respaldo",
+     "{}: the video file is damaged or incomplete (for example, a download that was cut short), so it cannot be opened. This is not an error in the app or the computer: download or copy the video again and choose it once more. The fallback color shows"),
     ("problem_copy_unavailable",
      "{}: este equipo no puede reproducir el video tal cual, y para crear una copia compatible hace falta ffmpeg (la versión Flatpak ya lo trae; fuera de ella, instala el paquete «ffmpeg»). Se ve el color de respaldo",
      "{}: this computer cannot play the video as it is, and making a compatible copy needs ffmpeg (the Flatpak version already includes it; otherwise install the \"ffmpeg\" package). The fallback color shows"),
@@ -181,6 +184,7 @@ mod tests {
             "video_too_slow",
             "copy_failed",
             "copy_unavailable",
+            "video_damaged",
         ] {
             let key = format!("problem_{code}");
             assert!(!t(Language::Es, &key).is_empty(), "{key}");

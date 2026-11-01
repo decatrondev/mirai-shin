@@ -669,4 +669,29 @@ async fn copias_compatibles() {
     wait_for(|| playing(&screen, "DP-1").is_some_and(|p| p.contains("1280x720-30-"))).await;
     assert_eq!(screen.lock().unwrap().history.len(), 1);
     stop(c, task).await;
+
+    // 6. Archivo cortado (ffmpeg no lo abre): `video_damaged`, no `copy_failed`.
+    std::fs::remove_dir_all(&dir).ok();
+    let roto = t.path().join("ffmpeg-roto");
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::write(
+            &roto,
+            "#!/bin/sh\necho '[mov,mp4 @ 0x1] moov atom not found' >&2\n\
+             echo 'Error opening input files: Invalid data found when processing input' >&2\nexit 1\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&roto, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let screen: Shared = Arc::new(Mutex::new(Screen {
+        outputs: vec![out("DP-1", 10, 10, 120)],
+        plays_video: true,
+        ..Screen::default()
+    }));
+    let task = start_with(&paths, &ep, &screen, env(true, roto));
+    let mut c = connect(&ep).await;
+    wait_for(|| color(&screen, "DP-1") == Some(FALLBACK)).await;
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(list["items"][0]["problem"], json!("video_damaged"));
+    stop(c, task).await;
 }
