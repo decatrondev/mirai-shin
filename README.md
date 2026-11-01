@@ -53,12 +53,12 @@ The Linux package (Flatpak) includes these libraries, built without changes from
 | Library | Version | License | What it does here |
 |---------|---------|---------|-------------------|
 | [mpv](https://mpv.io) (libmpv) | 0.41.0 | LGPL-2.1-or-later (built with `-Dgpl=false`) | Plays video wallpapers on Sway and Hyprland |
-| [FFmpeg](https://ffmpeg.org) | 7.1.2 | LGPL-2.1-or-later (decoders only, without GPL or non-free parts) | Decodes the video |
+| [FFmpeg](https://ffmpeg.org) | 7.1.2 | LGPL-2.1-or-later (decoders, plus the VP9 encoder and WebM output; without GPL or non-free parts) | Decodes the video, and makes a compatible VP9 copy when this computer cannot play the original |
 | [libplacebo](https://code.videolan.org/videolan/libplacebo) | 7.387.0 | LGPL-2.1-or-later | Draws the video frames with the graphics card |
 | [libass](https://github.com/libass/libass) | 0.17.4 | ISC | Required by mpv |
 | [libdisplay-info](https://gitlab.freedesktop.org/emersion/libdisplay-info) | 0.4.0 | MIT | Required by mpv for hardware decoding |
 
-The LGPL libraries are separate shared libraries in `/app/lib`, so they can be replaced by another compatible build. Their license texts travel inside the package, in `/app/share/licenses/net.decatron.MiraiShin/`. The app talks to libmpv through its public headers, which are under the ISC license ([`crates/render-video`](crates/render-video)). Everything else comes from the Freedesktop 25.08 runtime, under its own licenses. On KDE Plasma the video is played by Plasma itself (Qt Multimedia), which is not included in the package.
+The LGPL libraries are separate shared libraries in `/app/lib`, so they can be replaced by another compatible build. Their license texts travel inside the package, in `/app/share/licenses/net.decatron.MiraiShin/`. The app talks to libmpv through its public headers, which are under the ISC license ([`crates/render-video`](crates/render-video)). Everything else comes from the Freedesktop 25.08 runtime, under its own licenses (among them libvpx, BSD, which FFmpeg uses to encode VP9). On KDE Plasma the video is played by Plasma itself (Qt Multimedia), which is not included in the package.
 
 ---
 

@@ -53,12 +53,12 @@ El paquete de Linux (Flatpak) incluye estas bibliotecas, compiladas sin cambios 
 | Biblioteca | Versión | Licencia | Para qué se usa |
 |------------|---------|----------|-----------------|
 | [mpv](https://mpv.io) (libmpv) | 0.41.0 | LGPL-2.1-or-later (compilada con `-Dgpl=false`) | Reproduce los fondos de video en Sway y Hyprland |
-| [FFmpeg](https://ffmpeg.org) | 7.1.2 | LGPL-2.1-or-later (solo decodificadores, sin partes GPL ni no libres) | Decodifica el video |
+| [FFmpeg](https://ffmpeg.org) | 7.1.2 | LGPL-2.1-or-later (decodificadores, más el codificador VP9 y la salida WebM; sin partes GPL ni no libres) | Decodifica el video, y crea una copia compatible en VP9 cuando el equipo no puede reproducir el original |
 | [libplacebo](https://code.videolan.org/videolan/libplacebo) | 7.387.0 | LGPL-2.1-or-later | Dibuja los cuadros del video con la tarjeta gráfica |
 | [libass](https://github.com/libass/libass) | 0.17.4 | ISC | La necesita mpv |
 | [libdisplay-info](https://gitlab.freedesktop.org/emersion/libdisplay-info) | 0.4.0 | MIT | La necesita mpv para decodificar por hardware |
 
-Las bibliotecas LGPL van como bibliotecas compartidas aparte en `/app/lib`, así que se pueden reemplazar por otra compilación compatible. Sus textos de licencia van dentro del paquete, en `/app/share/licenses/net.decatron.MiraiShin/`. La app habla con libmpv a través de sus encabezados públicos, que tienen licencia ISC ([`crates/render-video`](crates/render-video)). Todo lo demás viene del runtime Freedesktop 25.08, con sus propias licencias. En KDE Plasma el video lo reproduce el propio Plasma (Qt Multimedia), que no va dentro del paquete.
+Las bibliotecas LGPL van como bibliotecas compartidas aparte en `/app/lib`, así que se pueden reemplazar por otra compilación compatible. Sus textos de licencia van dentro del paquete, en `/app/share/licenses/net.decatron.MiraiShin/`. La app habla con libmpv a través de sus encabezados públicos, que tienen licencia ISC ([`crates/render-video`](crates/render-video)). Todo lo demás viene del runtime Freedesktop 25.08, con sus propias licencias (entre ellas libvpx, BSD, que FFmpeg usa para codificar VP9). En KDE Plasma el video lo reproduce el propio Plasma (Qt Multimedia), que no va dentro del paquete.
 
 ---
 

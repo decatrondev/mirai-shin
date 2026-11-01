@@ -29,15 +29,22 @@ cleanup:
   - '*.la'
 modules:
   # ---- Video (fase 2.5): todo LGPL. El FFmpeg del runtime no trae H.264/HEVC y el de
-  # codecs-extra es GPL, así que va uno propio, solo para decodificar.
+  # codecs-extra es GPL, así que va uno propio: decodificar, más VP9 con libvpx (BSD, del
+  # runtime) para las copias.
   - name: ffmpeg
     config-opts:
       - --enable-shared
       - --disable-static
-      - --disable-programs
+      # Solo el programa ffmpeg: el daemon lo usa para crear la copia VP9 de un video que
+      # este equipo no puede reproducir (fase 2.9). Codificador y salida, solo VP9/WebM.
+      - --disable-ffplay
+      - --disable-ffprobe
       - --disable-doc
       - --disable-encoders
+      - --enable-encoder=libvpx_vp9
+      - --enable-libvpx
       - --disable-muxers
+      - --enable-muxer=webm
       - --disable-avdevice
       - --disable-network
       - --disable-sdl2
