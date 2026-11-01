@@ -51,6 +51,10 @@ const TEXTS: &[(&str, &str, &str)] = &[
     ("outputs_none", "No se ve ningún monitor.", "No monitors found."),
     ("outputs_all", "Para todos: {} [{}]", "For all: {} [{}]"),
     ("outputs_showing", "fondo: {} [{}]", "wallpaper: {} [{}]"),
+    ("outputs_showing_copy", "fondo: {} [{}] — copia compatible de {} (este equipo no reproducía bien el original)", "wallpaper: {} [{}] — compatible copy at {} (this computer could not play the original well)"),
+    ("outputs_copying",
+     "{}: creando una copia que este equipo pueda reproducir ({} %). Se hace una sola vez; mientras tanto sigue el fondo anterior",
+     "{}: making a copy this computer can play ({} %). It is done only once; the previous wallpaper stays meanwhile"),
     ("outputs_problem", "no se pudo mostrar {} ({}); se ve el color de respaldo", "could not show {} ({}); showing the fallback color"),
     // Problemas de un monitor: «problem_<código>». Si un código no tiene texto propio se usa
     // «outputs_problem».
@@ -81,6 +85,12 @@ const TEXTS: &[(&str, &str, &str)] = &[
     ("problem_video_too_slow",
      "{}: este equipo no da abasto con el video (llegan bastante menos cuadros de los que trae el video, así que se ve a saltos). No es un error de la app: pasa en máquinas virtuales o sin decodificación por la tarjeta gráfica. Prueba con un video de menor resolución (por ejemplo 720p)",
      "{}: this computer cannot keep up with the video (far fewer frames arrive than the video has, so it stutters). This is not an error in the app: it happens in virtual machines or without decoding on the graphics card. Try a lower-resolution video (for example 720p)"),
+    ("problem_copy_failed",
+     "{}: este equipo no puede reproducir el video tal cual, y no se pudo crear una copia compatible (el video está dañado o falta espacio en disco). Se ve el color de respaldo; al volver a elegirlo se intenta otra vez",
+     "{}: this computer cannot play the video as it is, and a compatible copy could not be made (the video is damaged or the disk is full). The fallback color shows; choosing it again tries once more"),
+    ("problem_copy_unavailable",
+     "{}: este equipo no puede reproducir el video tal cual, y para crear una copia compatible hace falta ffmpeg (la versión Flatpak ya lo trae; fuera de ella, instala el paquete «ffmpeg»). Se ve el color de respaldo",
+     "{}: this computer cannot play the video as it is, and making a compatible copy needs ffmpeg (the Flatpak version already includes it; otherwise install the \"ffmpeg\" package). The fallback color shows"),
     ("outputs_empty", "sin fondo", "no wallpaper"),
     ("unknown_command", "Comando desconocido: {}", "Unknown command: {}"),
     ("not_running",
@@ -165,6 +175,8 @@ mod tests {
             "video_gl_failed",
             "video_no_frames",
             "video_too_slow",
+            "copy_failed",
+            "copy_unavailable",
         ] {
             let key = format!("problem_{code}");
             assert!(!t(Language::Es, &key).is_empty(), "{key}");

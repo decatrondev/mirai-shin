@@ -43,6 +43,11 @@ impl Paths {
         self.data_dir.join("logs")
     }
 
+    /// Copias compatibles de los videos (fase 2.9). Se pueden borrar: se rehacen.
+    pub fn video_copies_dir(&self) -> PathBuf {
+        self.data_dir.join("video-copies")
+    }
+
     pub fn default_wallpapers_dir(&self) -> PathBuf {
         self.data_dir.join("wallpapers")
     }

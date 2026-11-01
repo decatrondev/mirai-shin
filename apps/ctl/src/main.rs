@@ -330,14 +330,21 @@ fn print_outputs(lang: Language, value: Value) {
     }
     for o in list.items {
         let what = match (&o.wallpaper, &o.problem) {
+            (Some(w), _) if o.copy_progress.is_some() => fill(
+                t(lang, "outputs_copying"),
+                &[w, &o.copy_progress.unwrap_or_default().to_string()],
+            ),
             (Some(w), Some(p)) => match t(lang, &format!("problem_{p}")) {
                 "" => fill(t(lang, "outputs_problem"), &[w, p]),
                 own => fill(own, &[w]),
             },
-            (Some(w), None) => fill(
-                t(lang, "outputs_showing"),
-                &[w, o.mode.as_deref().unwrap_or_default()],
-            ),
+            (Some(w), None) => {
+                let mode = o.mode.as_deref().unwrap_or_default();
+                match &o.copy {
+                    Some(size) => fill(t(lang, "outputs_showing_copy"), &[w, mode, size]),
+                    None => fill(t(lang, "outputs_showing"), &[w, mode]),
+                }
+            }
             (None, _) => t(lang, "outputs_empty").to_string(),
         };
         let desc = if o.description.is_empty() {

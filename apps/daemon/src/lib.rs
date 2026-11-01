@@ -1,5 +1,6 @@
 //! Daemon: arranca, lee ajustes, mantiene la biblioteca, pone los fondos y responde por IPC.
 
+pub mod copies;
 pub mod display;
 
 use chrono::Utc;
@@ -42,6 +43,17 @@ pub struct RunConfig {
     pub console_logs: bool,
     /// Cómo se pone el fondo. `None` = la de este escritorio (`display::auto_surface`).
     pub surface: Option<SurfaceFactory>,
+    /// Para pruebas: GPU, `ffmpeg` y tiempos de las copias de video. `None` = los de este
+    /// equipo (`copies::no_real_gpu`, `copies::find_ffmpeg`).
+    pub video_env: Option<VideoEnv>,
+}
+
+/// Lo que en un equipo real se detecta solo (ver `RunConfig::video_env`).
+#[derive(Debug, Clone)]
+pub struct VideoEnv {
+    pub no_real_gpu: bool,
+    pub ffmpeg: Option<std::path::PathBuf>,
+    pub check_delays: Vec<std::time::Duration>,
 }
 
 #[derive(Debug)]
@@ -132,6 +144,20 @@ pub async fn run(config: RunConfig) -> Result<(), RunError> {
         library.clone(),
         wallpapers_dir.clone(),
         events_tx.clone(),
+        {
+            let env = config.video_env.unwrap_or_else(|| VideoEnv {
+                no_real_gpu: copies::no_real_gpu(),
+                ffmpeg: copies::find_ffmpeg(),
+                check_delays: display::VideoOptions::DEFAULT_CHECKS.to_vec(),
+            });
+            display::VideoOptions {
+                copies_dir: config.paths.video_copies_dir(),
+                saver: settings.video_saver,
+                no_real_gpu: env.no_real_gpu,
+                ffmpeg: env.ffmpeg,
+                check_delays: env.check_delays,
+            }
+        },
     );
     let (surface_name, surface_ok) = screen.surface();
     tracing::info!(

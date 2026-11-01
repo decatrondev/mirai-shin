@@ -22,6 +22,8 @@ struct Screen {
     plays_video: bool,
     /// Lo que la superficie sabe después de `show_video` (en KDE lo informa Plasma).
     video_problems: HashMap<String, String>,
+    /// Todo lo que se mandó a reproducir, en orden.
+    history: Vec<String>,
     sink: Option<EventSink>,
 }
 
@@ -60,6 +62,7 @@ impl Surface for FakeSurface {
             return Err(SurfaceError::UnknownOutput);
         }
         s.frames.remove(output);
+        s.history.push(video.to_string_lossy().into_owned());
         s.videos.insert(output.into(), (video.to_path_buf(), mode));
         Ok(())
     }
@@ -172,12 +175,22 @@ const RED: [u8; 4] = [255, 0, 0, 255];
 const BLUE: [u8; 4] = [0, 0, 255, 255];
 
 fn start(paths: &Paths, ep: &Endpoint, screen: &Shared) -> tokio::task::JoinHandle<()> {
+    start_with(paths, ep, screen, test_video_env())
+}
+
+fn start_with(
+    paths: &Paths,
+    ep: &Endpoint,
+    screen: &Shared,
+    env: miraishin_daemon::VideoEnv,
+) -> tokio::task::JoinHandle<()> {
     let config = RunConfig {
         paths: paths.clone(),
         endpoint: ep.clone(),
         init_logging: false,
         console_logs: false,
         surface: Some(factory(screen.clone())),
+        video_env: Some(env),
     };
     tokio::spawn(async move {
         run(config).await.unwrap();
@@ -334,6 +347,7 @@ async fn sin_superficie_se_guarda_igual() {
         init_logging: false,
         console_logs: false,
         surface: Some(Box::new(|_| Err("kde_plugin_needs_restart".into()))),
+        video_env: Some(test_video_env()),
     };
     let task = tokio::spawn(async move { run(config).await.unwrap() });
     let mut c = connect(&ep).await;
@@ -451,5 +465,146 @@ async fn videos() {
     let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
     assert_eq!(list["items"][0]["wallpaper"], json!("olas"));
     assert_eq!(list["items"][0]["problem"], json!("video_unsupported"));
+    stop(c, task).await;
+}
+
+/// Sin GPU virtual, sin `ffmpeg` y sin revisiones: nada de copias salvo que la prueba lo pida.
+fn test_video_env() -> miraishin_daemon::VideoEnv {
+    miraishin_daemon::VideoEnv {
+        no_real_gpu: false,
+        ffmpeg: None,
+        check_delays: Vec::new(),
+    }
+}
+
+/// `ffmpeg` falso: escribe la duración y el avance como el de verdad y crea el archivo de
+/// salida (el último argumento). Con `falla` sale con error.
+#[cfg(unix)]
+fn fake_ffmpeg(dir: &std::path::Path, falla: bool) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let p = dir.join(if falla { "ffmpeg-malo" } else { "ffmpeg" });
+    let body = if falla {
+        "echo 'Invalid data found' >&2\nexit 1\n".to_string()
+    } else {
+        "echo '  Duration: 00:00:02.00, start: 0.000000' >&2\necho out_time_us=1000000\n\
+         for a in \"$@\"; do last=\"$a\"; done\nprintf webm > \"$last\"\necho progress=end\n"
+            .to_string()
+    };
+    std::fs::write(&p, format!("#!/bin/sh\n{body}")).unwrap();
+    std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+    p
+}
+
+fn playing(screen: &Shared, output: &str) -> Option<String> {
+    let s = screen.lock().unwrap();
+    s.videos
+        .get(output)
+        .map(|(p, _)| p.to_string_lossy().into_owned())
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn copias_compatibles() {
+    let t = tempfile::tempdir().unwrap();
+    let paths = Paths::under(t.path());
+    let ep = endpoint(t.path());
+    let wall = paths.default_wallpapers_dir();
+    video_wallpaper(&wall, "olas");
+    let env = |no_real_gpu, ffmpeg| miraishin_daemon::VideoEnv {
+        no_real_gpu,
+        ffmpeg: Some(ffmpeg),
+        check_delays: vec![Duration::from_millis(50)],
+    };
+
+    // 1. Equipo con GPU: primero el original. La superficie dice que no lo puede decodificar
+    //    → copia del tamaño de la pantalla (10×10 px); sigue sin verse → copia de ahorro.
+    let screen: Shared = Arc::new(Mutex::new(Screen {
+        outputs: vec![out("DP-1", 10, 10, 120)],
+        plays_video: true,
+        ..Screen::default()
+    }));
+    let task = start_with(
+        &paths,
+        &ep,
+        &screen,
+        env(false, fake_ffmpeg(t.path(), false)),
+    );
+    let mut c = connect(&ep).await;
+    c.call(methods::WALLPAPER_SET, json!({"folder": "olas"}))
+        .await
+        .unwrap();
+    assert_eq!(
+        playing(&screen, "DP-1"),
+        Some(wall.join("olas/v.mp4").to_string_lossy().into_owned())
+    );
+    screen
+        .lock()
+        .unwrap()
+        .video_problems
+        .insert("DP-1".into(), "video_no_decoder".into());
+    wait_for(|| playing(&screen, "DP-1").is_some_and(|p| p.contains("1280x720-30-"))).await;
+    {
+        let h = &screen.lock().unwrap().history;
+        assert_eq!(h.len(), 3, "{h:?}");
+        assert!(h[0].ends_with("olas/v.mp4"));
+        assert!(
+            h[1].contains("video-copies") && h[1].contains("/10x10-60-"),
+            "{h:?}"
+        );
+        assert!(h[2].contains("/1280x720-30-"), "{h:?}");
+    }
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(list["items"][0]["copy"], json!("1280x720"));
+    assert_eq!(list["items"][0]["copy_progress"], Value::Null);
+    // La copia de pantalla se borró al pasar a ahorro: queda una sola.
+    let dir = paths.video_copies_dir();
+    let copies: Vec<_> = std::fs::read_dir(
+        std::fs::read_dir(&dir)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path(),
+    )
+    .unwrap()
+    .flatten()
+    .filter(|e| e.path().extension().is_some_and(|x| x == "webm"))
+    .collect();
+    assert_eq!(copies.len(), 1);
+    // Ya en el último nivel, el problema se informa en vez de subir más.
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(list["items"][0]["problem"], json!("video_no_decoder"));
+    stop(c, task).await;
+
+    // 2. Sin GPU real: directo a la copia de ahorro, que ya existe de antes (no se rehace).
+    let screen: Shared = Arc::new(Mutex::new(Screen {
+        outputs: vec![out("DP-1", 10, 10, 120)],
+        plays_video: true,
+        ..Screen::default()
+    }));
+    let task = start_with(&paths, &ep, &screen, env(true, t.path().join("no-existe")));
+    let c = connect(&ep).await;
+    wait_for(|| playing(&screen, "DP-1").is_some_and(|p| p.contains("1280x720-30-"))).await;
+    assert_eq!(
+        screen.lock().unwrap().history.len(),
+        1,
+        "sin pasar por el original"
+    );
+    stop(c, task).await;
+
+    // 3. La copia falla: color de respaldo y el código.
+    std::fs::remove_dir_all(&dir).unwrap();
+    let screen: Shared = Arc::new(Mutex::new(Screen {
+        outputs: vec![out("DP-1", 10, 10, 120)],
+        plays_video: true,
+        ..Screen::default()
+    }));
+    let task = start_with(&paths, &ep, &screen, env(true, fake_ffmpeg(t.path(), true)));
+    let mut c = connect(&ep).await;
+    wait_for(|| color(&screen, "DP-1") == Some(FALLBACK)).await;
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(list["items"][0]["problem"], json!("copy_failed"));
+    assert_eq!(playing(&screen, "DP-1"), None);
     stop(c, task).await;
 }

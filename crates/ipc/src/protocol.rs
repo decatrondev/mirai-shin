@@ -206,6 +206,12 @@ pub struct OutputItem {
     /// Código si no pudo mostrar lo elegido (se ve el color de respaldo).
     #[serde(default)]
     pub problem: Option<String>,
+    /// Si el video se ve con una copia compatible, su tamaño máximo (`1280x720`).
+    #[serde(default)]
+    pub copy: Option<String>,
+    /// Mientras se crea esa copia, cuánto va (0–100). Se sigue viendo el fondo anterior.
+    #[serde(default)]
+    pub copy_progress: Option<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

@@ -63,6 +63,13 @@ La biblioteca es solo un índice: la verdad son las carpetas de fondos. Si el ar
 wallpapers_dir = "/home/ana/Fondos"  # opcional; por defecto, la carpeta de arriba
 language = "system"                   # system, es, en
 log_level = "info"                    # error, warn, info, debug, trace
+video_saver = "auto"                  # auto, on, off (ver «Copias compatibles»)
 ```
 
 Todas las claves son opcionales. Un valor no válido usa su valor por defecto y se anota en el log. Las claves que esta versión no conoce se conservan al guardar. `RUST_LOG` pisa `log_level` para depurar.
+
+## Copias compatibles de los videos
+
+Si este equipo no puede reproducir bien un video, el daemon crea una vez una copia en VP9 (WebM, formato libre que traen todas las distribuciones) y reproduce esa. El original nunca se toca. Sube de a un paso: el original, después una copia del tamaño del monitor más grande, y después una copia de ahorro (720p, 30 cuadros por segundo). En KDE Plasma sube cuando Plasma informa `video_no_decoder`, `video_no_frames` o `video_too_slow` (pregunta a los 3, 10 y 22 segundos de poner el video). Mientras se crea la copia sigue el fondo anterior y `outputs` muestra el avance; al terminar reemplaza al viejo sin hueco. En un equipo con un procesador rápido la copia tarda menos de lo que dura el video (un Ryzen 5 3500U convierte 20 segundos de video 4K en unos 14 segundos).
+
+`video_saver`: `auto` (por defecto) empieza con la copia de ahorro cuando el equipo no tiene una tarjeta gráfica real (máquina virtual, o sin tarjeta) y si no, sube solo si hace falta; `on` usa siempre la copia de ahorro; `off` nunca la usa (como mucho, la copia del tamaño del monitor). Las copias van en `video-copies/` dentro de la carpeta de datos de la app; se pueden borrar y se vuelven a crear cuando hacen falta. Si el video de un fondo cambia, su copia vieja se borra al crear la nueva; las copias de fondos quitados se borran la próxima vez que arranca el daemon. Códigos: `copy_failed` (el video está dañado o falta espacio en disco; al volver a elegir el fondo se intenta otra vez) y `copy_unavailable` (no hay `ffmpeg`; el Flatpak lo trae).

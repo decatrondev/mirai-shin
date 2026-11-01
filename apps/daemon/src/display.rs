@@ -6,17 +6,22 @@
 //! una foto grande) y no debe frenar las respuestas del IPC. Habla con el resto por canales.
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
+use miraishin_core::copies::{fixable_by_copy, CopyLevel, CopyTarget, VideoSaver};
 use miraishin_core::fit::FitMode;
+use miraishin_core::surface::Size;
 use miraishin_core::surface::{EventSink, Frame, OutputInfo, Surface, SurfaceEvent};
 use miraishin_ipc::{events, Event, OutputItem, OutputsList};
 use miraishin_render_image as render;
 use miraishin_store::{Assignment, Library, ALL_OUTPUTS};
 use serde_json::json;
 use tokio::sync::{broadcast, oneshot};
+
+use crate::copies;
 
 /// Crea la superficie. Devuelve el nombre de la forma usada (`layer_shell`, …) o el código
 /// de por qué no hay.
@@ -32,7 +37,34 @@ enum Msg {
     Apply(Option<oneshot::Sender<()>>),
     Surface(SurfaceEvent),
     Outputs(oneshot::Sender<OutputsList>),
+    /// Avance de una copia compatible (fase 2.9).
+    CopyProgress(PathBuf, u8),
+    /// Terminó una copia: `Err` con el código si falló.
+    CopyDone(PathBuf, Result<(), &'static str>),
     Stop,
+}
+
+/// Cómo se manejan los videos que este equipo no reproduce bien (fase 2.9).
+#[derive(Debug, Clone)]
+pub struct VideoOptions {
+    /// `<datos>/video-copies`.
+    pub copies_dir: PathBuf,
+    pub saver: VideoSaver,
+    /// Tarjeta gráfica virtual o ninguna (`copies::no_real_gpu`).
+    pub no_real_gpu: bool,
+    /// El programa `ffmpeg` (`None` = no se pueden crear copias).
+    pub ffmpeg: Option<PathBuf>,
+    /// Cuándo se le pregunta a la superficie si un video se ve, después de ponerlo. Lo de
+    /// 22 s alcanza para `video_too_slow` (primer cuadro + dos ventanas de 5 s en KDE).
+    pub check_delays: Vec<Duration>,
+}
+
+impl VideoOptions {
+    pub const DEFAULT_CHECKS: [Duration; 3] = [
+        Duration::from_secs(3),
+        Duration::from_secs(10),
+        Duration::from_secs(22),
+    ];
 }
 
 /// Manija para el resto del daemon.
@@ -49,6 +81,7 @@ impl Display {
         library: Arc<Mutex<Library>>,
         wallpapers_dir: PathBuf,
         events: broadcast::Sender<Event>,
+        video: VideoOptions,
     ) -> Self {
         let (tx, rx) = mpsc::channel();
         let sink_tx = tx.clone();
@@ -62,7 +95,28 @@ impl Display {
                 (None, code, false)
             }
         };
+        if surface.is_some() {
+            // Copias de fondos que ya no existen y copias a medias de otra sesión.
+            copies::cleanup(&video.copies_dir, |folder| {
+                let lib = library.lock().unwrap_or_else(|p| p.into_inner());
+                lib.get(folder).ok().flatten().is_some()
+            });
+        }
+        tracing::info!(
+            saver = video.saver.as_str(),
+            no_real_gpu = video.no_real_gpu,
+            ffmpeg = video.ffmpeg.is_some(),
+            "video copies"
+        );
         let worker = Worker {
+            tx: tx.clone(),
+            video,
+            levels: HashMap::new(),
+            jobs: HashMap::new(),
+            failed: HashMap::new(),
+            copying: HashMap::new(),
+            copy_label: HashMap::new(),
+            checks: Vec::new(),
             surface,
             surface_name: name.clone(),
             available,
@@ -129,6 +183,21 @@ struct Shown {
 }
 
 struct Worker {
+    /// Para que los hilos de las copias avisen.
+    tx: mpsc::Sender<Msg>,
+    video: VideoOptions,
+    /// Nivel al que subió cada video (carpeta, versión) por no verse bien.
+    levels: HashMap<(String, String), CopyLevel>,
+    /// Copias en curso y cuánto van.
+    jobs: HashMap<PathBuf, u8>,
+    /// Copias que fallaron, con su código (se reintentan con el próximo `set`).
+    failed: HashMap<PathBuf, &'static str>,
+    /// Monitores esperando una copia (sigue el fondo anterior) y su tamaño.
+    copying: HashMap<String, (PathBuf, String)>,
+    /// Monitores que muestran una copia, y su tamaño (`1280x720`).
+    copy_label: HashMap<String, String>,
+    /// Cuándo preguntar si el video de un monitor se ve.
+    checks: Vec<(Instant, String)>,
     surface: Option<Box<dyn Surface>>,
     surface_name: String,
     available: bool,
@@ -146,9 +215,28 @@ struct Worker {
 
 impl Worker {
     fn run(mut self, rx: mpsc::Receiver<Msg>) {
-        while let Ok(msg) = rx.recv() {
+        loop {
+            let next = self.checks.iter().map(|c| c.0).min();
+            let msg = match next {
+                Some(due) => match rx.recv_timeout(due.saturating_duration_since(Instant::now())) {
+                    Ok(m) => m,
+                    Err(mpsc::RecvTimeoutError::Timeout) => {
+                        self.run_checks();
+                        continue;
+                    }
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                },
+                None => match rx.recv() {
+                    Ok(m) => m,
+                    Err(_) => break,
+                },
+            };
             match msg {
                 Msg::Apply(done) => {
+                    if done.is_some() {
+                        // Un `set`/`rescan` explícito vuelve a intentar las copias fallidas.
+                        self.failed.clear();
+                    }
                     self.apply();
                     if let Some(d) = done {
                         let _ = d.send(());
@@ -166,6 +254,35 @@ impl Worker {
                 }
                 Msg::Outputs(reply) => {
                     let _ = reply.send(self.list());
+                }
+                Msg::CopyProgress(path, pct) => {
+                    if let Some(p) = self.jobs.get_mut(&path) {
+                        *p = pct;
+                    }
+                }
+                Msg::CopyDone(path, result) => {
+                    self.jobs.remove(&path);
+                    match result {
+                        Ok(()) => {
+                            tracing::info!(copy = %miraishin_store::paths::redact(&path), "video copy ready")
+                        }
+                        Err(code) => {
+                            tracing::warn!(code, "video copy could not be made");
+                            self.failed.insert(path.clone(), code);
+                        }
+                    }
+                    // Los monitores que la esperaban se vuelven a poner.
+                    let waiting: Vec<String> = self
+                        .copying
+                        .iter()
+                        .filter(|(_, (p, _))| *p == path)
+                        .map(|(o, _)| o.clone())
+                        .collect();
+                    for o in waiting {
+                        self.copying.remove(&o);
+                        self.shown.remove(&o);
+                    }
+                    self.apply();
                 }
                 Msg::Stop => break,
             }
@@ -186,6 +303,11 @@ impl Worker {
             return;
         };
         let outputs = surface.outputs();
+        let largest = outputs
+            .iter()
+            .map(|o| o.pixel_size())
+            .max_by_key(|s| u64::from(s.width) * u64::from(s.height))
+            .unwrap_or(Size::new(1920, 1080));
         let mut changed = false;
         // La misma imagen se decodifica una sola vez para todos los monitores.
         let mut decoded: HashMap<PathBuf, Result<render::RgbaImage, render::RenderError>> =
@@ -194,6 +316,8 @@ impl Worker {
         for output in &outputs {
             let Some((folder, mode)) = resolve(&assignments, &output.name) else {
                 self.videos.remove(&output.name);
+                self.copying.remove(&output.name);
+                self.copy_label.remove(&output.name);
                 if self.shown.remove(&output.name).is_some() || self.first {
                     let _ = surface.clear(&output.name);
                     changed = true;
@@ -217,24 +341,69 @@ impl Worker {
             }) {
                 continue;
             }
-            // Video: lo reproduce la superficie. Si no sabe o el archivo falta, respaldo.
+            self.copying.remove(&output.name);
+            self.copy_label.remove(&output.name);
+            // Video: lo reproduce la superficie, el original o una copia compatible (2.9).
+            // Si no sabe, el archivo falta o la copia falla, respaldo.
             let source = match source {
+                Ok(Source::Video(path)) if !path.is_file() => Err("video_unreadable".to_string()),
                 Ok(Source::Video(path)) => {
-                    let result = if path.is_file() {
-                        surface
-                            .show_video(&output.name, &path, mode)
-                            .map_err(|e| e.as_str().to_string())
-                    } else {
-                        Err("video_unreadable".to_string())
+                    let level =
+                        level_for(&self.video, &self.levels, &folder, &key.version, largest);
+                    let play = match level.target(largest) {
+                        None => Ok(Some((path.clone(), None))),
+                        Some(t) => {
+                            let cp = copies::copy_path(
+                                &self.video.copies_dir,
+                                &folder,
+                                &key.version,
+                                &t,
+                            );
+                            if cp.is_file() {
+                                Ok(Some((cp, Some(t.label()))))
+                            } else if let Some(code) = self.failed.get(&cp) {
+                                Err(code.to_string())
+                            } else {
+                                if !self.jobs.contains_key(&cp) {
+                                    start_copy(&self.video, &self.tx, &path, &cp, t, &folder);
+                                    self.jobs.insert(cp.clone(), 0);
+                                }
+                                self.copying.insert(output.name.clone(), (cp, t.label()));
+                                Ok(None)
+                            }
+                        }
                     };
-                    match result {
-                        Ok(()) => {
+                    match play {
+                        // Mientras se crea la copia sigue el fondo anterior.
+                        Ok(None) => {
                             tracing::info!(output = %output.name, folder = %folder,
-                                mode = mode.as_str(), "video wallpaper shown");
+                                level = ?level, "making a compatible copy of the video");
+                            self.videos.remove(&output.name);
                             self.shown.insert(output.name.clone(), key);
-                            self.videos.insert(output.name.clone());
                             changed = true;
                             continue;
+                        }
+                        Ok(Some((file, label))) => {
+                            match surface.show_video(&output.name, &file, mode) {
+                                Ok(()) => {
+                                    tracing::info!(output = %output.name, folder = %folder,
+                                    mode = mode.as_str(), copy = ?label, "video wallpaper shown");
+                                    self.shown.insert(output.name.clone(), key);
+                                    self.videos.insert(output.name.clone());
+                                    if let Some(l) = label {
+                                        self.copy_label.insert(output.name.clone(), l);
+                                    }
+                                    // Más tarde se pregunta si de verdad se ve (KDE).
+                                    self.checks.retain(|(_, o)| *o != output.name);
+                                    let now = Instant::now();
+                                    for d in &self.video.check_delays {
+                                        self.checks.push((now + *d, output.name.clone()));
+                                    }
+                                    changed = true;
+                                    continue;
+                                }
+                                Err(e) => Err(e.as_str().to_string()),
+                            }
                         }
                         Err(code) => Err(code),
                     }
@@ -285,10 +454,83 @@ impl Worker {
         self.shown
             .retain(|name, _| present.contains(&name.as_str()));
         self.videos.retain(|name| present.contains(&name.as_str()));
+        self.copying
+            .retain(|name, _| present.contains(&name.as_str()));
+        self.copy_label
+            .retain(|name, _| present.contains(&name.as_str()));
+        self.checks
+            .retain(|(_, name)| present.contains(&name.as_str()));
         if changed {
             let _ = self
                 .events
                 .send(Event::new(events::OUTPUTS_CHANGED, json!(self.list())));
+        }
+    }
+
+    /// Pregunta a la superficie por los videos cuyo momento llegó. Si uno no se ve por algo
+    /// que una copia arregla, sube un nivel (original → pantalla → ahorro) y lo vuelve a poner.
+    fn run_checks(&mut self) {
+        let now = Instant::now();
+        let due: Vec<String> = self
+            .checks
+            .iter()
+            .filter(|(t, _)| *t <= now)
+            .map(|(_, o)| o.clone())
+            .collect();
+        self.checks.retain(|(t, _)| *t > now);
+        let mut again = false;
+        for output in due {
+            if !self.videos.contains(&output) {
+                continue;
+            }
+            let Some(problem) = self.surface.as_ref().and_then(|s| s.video_problem(&output)) else {
+                continue;
+            };
+            let Some(shown) = self.shown.get(&output).cloned() else {
+                continue;
+            };
+            if !fixable_by_copy(&problem) {
+                continue;
+            }
+            let largest = self
+                .surface
+                .as_ref()
+                .map(|s| s.outputs())
+                .unwrap_or_default()
+                .iter()
+                .map(|o| o.pixel_size())
+                .max_by_key(|s| u64::from(s.width) * u64::from(s.height))
+                .unwrap_or(Size::new(1920, 1080));
+            let current = level_for(
+                &self.video,
+                &self.levels,
+                &shown.folder,
+                &shown.version,
+                largest,
+            );
+            let (_, cap) = self.video.saver.levels(self.video.no_real_gpu);
+            let Some(next) = current.next().filter(|n| *n <= cap) else {
+                continue;
+            };
+            tracing::info!(output = %output, folder = %shown.folder, problem = %problem,
+                from = ?current, to = ?next, "video does not play well here; using a compatible copy");
+            self.levels
+                .insert((shown.folder.clone(), shown.version.clone()), next);
+            // Todos los monitores con ese video se vuelven a poner.
+            let same: Vec<String> = self
+                .shown
+                .iter()
+                .filter(|(_, s)| s.folder == shown.folder)
+                .map(|(o, _)| o.clone())
+                .collect();
+            for o in same {
+                self.shown.remove(&o);
+                self.checks.retain(|(_, c)| *c != o);
+            }
+            again = true;
+        }
+        if again {
+            self.apply();
         }
     }
 
@@ -324,6 +566,11 @@ impl Worker {
                         wallpaper: shown.map(|s| s.folder.clone()),
                         mode: shown.map(|s| s.mode.as_str().to_string()),
                         problem,
+                        copy: self.copy_label.get(&o.name).cloned(),
+                        copy_progress: self
+                            .copying
+                            .get(&o.name)
+                            .and_then(|(p, _)| self.jobs.get(p).copied()),
                     }
                 })
                 .collect(),
@@ -332,6 +579,68 @@ impl Worker {
             all: all.and_then(|a| a.folder.clone()),
             all_mode: all.map(|a| a.mode.clone()),
         }
+    }
+}
+
+/// Nivel con que se muestra un video: el de inicio según el ajuste y la GPU, lo que ya subió
+/// en esta sesión, o una copia que ya existe de antes (sin pasar del máximo).
+fn level_for(
+    video: &VideoOptions,
+    levels: &HashMap<(String, String), CopyLevel>,
+    folder: &str,
+    version: &str,
+    largest: Size,
+) -> CopyLevel {
+    let (start, cap) = video.saver.levels(video.no_real_gpu);
+    let mut level = levels
+        .get(&(folder.to_string(), version.to_string()))
+        .copied()
+        .unwrap_or(start)
+        .max(start);
+    for l in [CopyLevel::Screen, CopyLevel::Saver] {
+        if l > level
+            && l <= cap
+            && l.target(largest).is_some_and(|t| {
+                copies::copy_path(&video.copies_dir, folder, version, &t).is_file()
+            })
+        {
+            level = l;
+        }
+    }
+    level.min(cap)
+}
+
+/// Crea una copia en un hilo aparte; avisa el avance y el final por el canal del hilo.
+fn start_copy(
+    video: &VideoOptions,
+    tx: &mpsc::Sender<Msg>,
+    input: &Path,
+    output: &Path,
+    target: CopyTarget,
+    folder: &str,
+) {
+    copies::prepare_folder(&video.copies_dir, folder, &[]);
+    let (fail_tx, fail_path) = (tx.clone(), output.to_path_buf());
+    let (ffmpeg, input, output, tx) = (
+        video.ffmpeg.clone(),
+        input.to_path_buf(),
+        output.to_path_buf(),
+        tx.clone(),
+    );
+    let spawned = std::thread::Builder::new()
+        .name("video-copy".into())
+        .spawn(move || {
+            let mut last = None;
+            let result = copies::make_copy(ffmpeg.as_deref(), &input, &output, &target, |p| {
+                if last != Some(p) {
+                    last = Some(p);
+                    let _ = tx.send(Msg::CopyProgress(output.clone(), p));
+                }
+            });
+            let _ = tx.send(Msg::CopyDone(output, result));
+        });
+    if spawned.is_err() {
+        let _ = fail_tx.send(Msg::CopyDone(fail_path, Err("copy_failed")));
     }
 }
 

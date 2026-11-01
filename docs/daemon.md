@@ -63,6 +63,13 @@ The library is only an index: the wallpaper folders are the truth. If the librar
 wallpapers_dir = "/home/ana/Wallpapers"  # optional; default: the folder above
 language = "system"                       # system, es, en
 log_level = "info"                        # error, warn, info, debug, trace
+video_saver = "auto"                      # auto, on, off (see "Compatible copies")
 ```
 
 Every key is optional. An invalid value uses its default and is noted in the log. Keys this version does not know are kept when the settings are saved. `RUST_LOG` overrides `log_level` for debugging.
+
+## Compatible copies of videos
+
+If this computer cannot play a video well, the daemon makes a copy of it once, in VP9 (WebM, a free format every distribution includes), and plays that copy. The original is never changed. It goes up one step at a time: the original, then a copy at the size of the largest monitor, then a power-saving copy (720p, 30 frames per second). On KDE Plasma it steps up when Plasma reports `video_no_decoder`, `video_no_frames` or `video_too_slow` (it asks 3, 10 and 22 seconds after showing the video). While the copy is being made, the previous wallpaper stays and `outputs` shows the progress; when it is ready it replaces the old one without a gap. On a computer with a fast processor a copy takes less time than the video lasts (a Ryzen 5 3500U converts 20 seconds of 4K video in about 14 seconds).
+
+`video_saver`: `auto` (default) starts with the power-saving copy when the computer has no real graphics card (a virtual machine, or no graphics card at all) and otherwise steps up only if needed; `on` always uses the power-saving copy; `off` never uses it (at most the copy at monitor size). Copies live in `video-copies/` inside the app's data folder; they can be deleted, and they are made again when needed. When a wallpaper's video changes, its old copy is deleted as soon as the new one is made; copies of removed wallpapers are deleted the next time the daemon starts. Codes: `copy_failed` (the video is damaged or the disk is full; choosing the wallpaper again tries once more) and `copy_unavailable` (there is no `ffmpeg`; the Flatpak includes it).

@@ -68,6 +68,7 @@ async fn ciclo_completo() {
         init_logging: false,
         console_logs: false,
         surface: Some(no_surface()),
+        video_env: Some(test_video_env()),
     }));
     let mut c = connect(&ep).await;
 
@@ -125,6 +126,7 @@ async fn ciclo_completo() {
         init_logging: false,
         console_logs: false,
         surface: Some(no_surface()),
+        video_env: Some(test_video_env()),
     })
     .await;
     assert!(matches!(second, Err(RunError::AlreadyRunning)));
@@ -168,6 +170,7 @@ async fn carpeta_elegida_que_no_existe() {
         init_logging: false,
         console_logs: false,
         surface: Some(no_surface()),
+        video_env: Some(test_video_env()),
     }));
     let mut c = connect(&ep).await;
     let status = c.call(methods::STATUS, Value::Null).await.unwrap();
@@ -186,4 +189,13 @@ async fn carpeta_elegida_que_no_existe() {
         .unwrap()
         .unwrap()
         .unwrap();
+}
+
+/// Sin GPU virtual, sin `ffmpeg` y sin revisiones: nada de copias salvo que la prueba lo pida.
+fn test_video_env() -> miraishin_daemon::VideoEnv {
+    miraishin_daemon::VideoEnv {
+        no_real_gpu: false,
+        ffmpeg: None,
+        check_delays: Vec::new(),
+    }
 }

@@ -2,6 +2,7 @@
 //! suyo y se avisa, sin caerse. Al guardar se conservan las claves que esta versión no
 //! conoce (si una versión nueva agregó ajustes, una vieja no los borra).
 
+use miraishin_core::copies::VideoSaver;
 use std::path::{Path, PathBuf};
 use toml_edit::{value, DocumentMut};
 
@@ -83,6 +84,8 @@ pub struct Settings {
     pub wallpapers_dir: Option<PathBuf>,
     pub language: Language,
     pub log_level: LogLevel,
+    /// Copias de ahorro de los videos (fase 2.9): `auto`, `on` u `off`.
+    pub video_saver: VideoSaver,
 }
 
 /// Aviso al leer los ajustes: clave con valor no válido (se usó el valor por defecto),
@@ -128,6 +131,12 @@ impl Settings {
                 None => warnings.push(SettingsWarning::InvalidValue("log_level")),
             }
         }
+        if let Some(item) = doc.get("video_saver") {
+            match item.as_str().and_then(VideoSaver::parse) {
+                Some(v) => s.video_saver = v,
+                None => warnings.push(SettingsWarning::InvalidValue("video_saver")),
+            }
+        }
         (s, warnings)
     }
 
@@ -155,6 +164,7 @@ impl Settings {
         }
         doc["language"] = value(self.language.as_str());
         doc["log_level"] = value(self.log_level.as_str());
+        doc["video_saver"] = value(self.video_saver.as_str());
         doc.to_string()
     }
 }
@@ -185,6 +195,12 @@ mod tests {
                 SettingsWarning::InvalidValue("language")
             ]
         );
+        let (s, w) = Settings::parse("video_saver = \"on\"\n");
+        assert_eq!(s.video_saver, VideoSaver::On);
+        assert!(w.is_empty());
+        let (s, w) = Settings::parse("video_saver = \"siempre\"\n");
+        assert_eq!(s.video_saver, VideoSaver::Auto);
+        assert_eq!(w, vec![SettingsWarning::InvalidValue("video_saver")]);
         let (s, w) = Settings::parse("esto no es toml = = =");
         assert_eq!(s, Settings::default());
         assert_eq!(w, vec![SettingsWarning::UnreadableFile]);
