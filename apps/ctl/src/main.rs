@@ -74,6 +74,8 @@ fn parse(args: &[String]) -> Parsed {
         ),
         ["set"] => Parsed::Bad("set_needs_folder", String::new()),
         ["clear"] => run(methods::WALLPAPER_CLEAR, json!({ "output": monitor })),
+        ["pause"] => run(methods::PLAYBACK_PAUSE, json!({ "output": monitor })),
+        ["resume"] => run(methods::PLAYBACK_RESUME, json!({ "output": monitor })),
         [cmd, ..] if KNOWN.contains(cmd) => {
             Parsed::Bad("extra_argument", positional[1..].join(" "))
         }
@@ -82,7 +84,8 @@ fn parse(args: &[String]) -> Parsed {
 }
 
 const KNOWN: &[&str] = &[
-    "status", "list", "rescan", "ping", "shutdown", "outputs", "set", "clear", "help",
+    "status", "list", "rescan", "ping", "shutdown", "outputs", "set", "clear", "pause", "resume",
+    "help",
 ];
 
 fn main() -> ExitCode {
@@ -241,6 +244,19 @@ fn print_human(lang: Language, method: &str, value: Value) {
             }
             print_outputs(lang, value);
         }
+        methods::PLAYBACK_PAUSE | methods::PLAYBACK_RESUME => {
+            let list: OutputsList = serde_json::from_value(value.clone()).unwrap_or_default();
+            let key = if method == methods::PLAYBACK_PAUSE {
+                "paused_done"
+            } else {
+                "resumed_done"
+            };
+            println!("{}", t(lang, key));
+            if list.items.iter().any(|o| o.pause_unsupported) {
+                println!("{}", t(lang, "pause_unsupported"));
+            }
+            print_outputs(lang, value);
+        }
         methods::LIBRARY_LIST => {
             let list: LibraryList = serde_json::from_value(value).unwrap_or_default();
             if list.items.is_empty() {
@@ -347,6 +363,16 @@ fn print_outputs(lang: Language, value: Value) {
             }
             (None, _) => t(lang, "outputs_empty").to_string(),
         };
+        let what = match &o.paused {
+            Some(reason) => {
+                let why = match t(lang, &format!("pause_{reason}")) {
+                    "" => reason.as_str(),
+                    own => own,
+                };
+                format!("{what} — {}", fill(t(lang, "outputs_paused"), &[why]))
+            }
+            None => what,
+        };
         let desc = if o.description.is_empty() {
             String::new()
         } else {
@@ -425,6 +451,28 @@ mod tests {
         assert_eq!(
             (c.method, c.params),
             (methods::WALLPAPER_CLEAR, json!({"output": "HDMI-A-1"}))
+        );
+    }
+
+    #[test]
+    fn pausa_y_reanudar() {
+        let Parsed::Run(c) = p(&["pause"]) else {
+            panic!()
+        };
+        assert_eq!(
+            (c.method, c.params),
+            (methods::PLAYBACK_PAUSE, json!({"output": null}))
+        );
+        let Parsed::Run(c) = p(&["resume", "--monitor", "DP-1"]) else {
+            panic!()
+        };
+        assert_eq!(
+            (c.method, c.params),
+            (methods::PLAYBACK_RESUME, json!({"output": "DP-1"}))
+        );
+        assert_eq!(
+            p(&["pause", "x"]),
+            Parsed::Bad("extra_argument", "x".into())
         );
     }
 }

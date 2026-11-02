@@ -13,8 +13,9 @@ use std::time::{Duration, Instant};
 
 use miraishin_core::copies::{fixable_by_copy, CopyLevel, CopyTarget, VideoSaver};
 use miraishin_core::fit::FitMode;
+use miraishin_core::pause::{self, OutputSignals, PauseReason, PauseSettings, SystemSignals};
 use miraishin_core::surface::Size;
-use miraishin_core::surface::{EventSink, Frame, OutputInfo, Surface, SurfaceEvent};
+use miraishin_core::surface::{EventSink, Frame, OutputInfo, Surface, SurfaceError, SurfaceEvent};
 use miraishin_ipc::{events, Event, OutputItem, OutputsList};
 use miraishin_render_image as render;
 use miraishin_store::{Assignment, Library, ALL_OUTPUTS};
@@ -41,6 +42,8 @@ enum Msg {
     CopyProgress(PathBuf, u8),
     /// Terminó una copia: `Err` con el código si falló.
     CopyDone(PathBuf, Result<(), &'static str>),
+    /// Pausa a mano (`true`) o la quita, de un monitor o de todos (fase 3).
+    Pause(Option<String>, bool, oneshot::Sender<()>),
     Stop,
 }
 
@@ -82,6 +85,7 @@ impl Display {
         wallpapers_dir: PathBuf,
         events: broadcast::Sender<Event>,
         video: VideoOptions,
+        pause: PauseSettings,
     ) -> Self {
         let (tx, rx) = mpsc::channel();
         let sink_tx = tx.clone();
@@ -127,6 +131,12 @@ impl Display {
             shown: HashMap::new(),
             videos: HashSet::new(),
             first: true,
+            pause_settings: pause,
+            system: SystemSignals::default(),
+            manual: HashSet::new(),
+            signals: HashMap::new(),
+            paused: HashMap::new(),
+            pause_unsupported: HashSet::new(),
         };
         let started = std::thread::Builder::new()
             .name("display".into())
@@ -165,6 +175,14 @@ impl Display {
             return OutputsList::default();
         }
         rx.await.unwrap_or_default()
+    }
+
+    /// Pausa a mano o la quita (`ctl pause` / `ctl resume`), y espera a que se aplique.
+    pub async fn pause(&self, output: Option<String>, paused: bool) {
+        let (tx, rx) = oneshot::channel();
+        if self.tx.send(Msg::Pause(output, paused, tx)).is_ok() {
+            let _ = rx.await;
+        }
     }
 
     pub fn stop(&self) {
@@ -214,6 +232,19 @@ struct Worker {
     /// En la primera pasada se quita el fondo de los monitores sin nada elegido: en KDE el
     /// de una sesión anterior sigue puesto aunque el daemon se haya reiniciado.
     first: bool,
+    // ---- Pausa (fase 3)
+    pause_settings: PauseSettings,
+    system: SystemSignals,
+    /// Monitores pausados a mano uno por uno (lo de todos va en `system.manual_all`). Solo
+    /// en memoria: al reiniciar el daemon, los videos vuelven a reproducirse.
+    manual: HashSet<String>,
+    /// Señales de cada monitor (pantalla completa, pantalla apagada…).
+    signals: HashMap<String, OutputSignals>,
+    /// Lo que ya se le pidió a la superficie en cada monitor con video: `Some(motivo)` en
+    /// pausa, `None` reproduciendo. Sin entrada = no se sabe (video recién puesto): se pide.
+    paused: HashMap<String, Option<PauseReason>>,
+    /// Monitores donde se quiso pausar y la superficie no sabe.
+    pause_unsupported: HashSet<String>,
 }
 
 impl Worker {
@@ -286,6 +317,13 @@ impl Worker {
                         self.shown.remove(&o);
                     }
                     self.apply();
+                }
+                Msg::Pause(output, paused, reply) => {
+                    self.set_manual(output, paused);
+                    if self.update_pause() {
+                        self.send_outputs();
+                    }
+                    let _ = reply.send(());
                 }
                 Msg::Stop => break,
             }
@@ -404,6 +442,8 @@ impl Worker {
                                 Ok(()) => {
                                     tracing::info!(output = %output.name, folder = %folder,
                                     mode = mode.as_str(), copy = ?label, "video wallpaper shown");
+                                    // Recién puesto: la pausa se vuelve a pedir abajo.
+                                    self.paused.remove(&output.name);
                                     self.shown.insert(output.name.clone(), key);
                                     self.videos.insert(output.name.clone());
                                     if let Some(l) = label {
@@ -476,11 +516,110 @@ impl Worker {
             .retain(|name, _| present.contains(&name.as_str()));
         self.checks
             .retain(|(_, name)| present.contains(&name.as_str()));
-        if changed {
-            let _ = self
-                .events
-                .send(Event::new(events::OUTPUTS_CHANGED, json!(self.list())));
+        self.signals
+            .retain(|name, _| present.contains(&name.as_str()));
+        if self.update_pause() {
+            changed = true;
         }
+        if changed {
+            self.send_outputs();
+        }
+    }
+
+    fn send_outputs(&self) {
+        let _ = self
+            .events
+            .send(Event::new(events::OUTPUTS_CHANGED, json!(self.list())));
+    }
+
+    /// Pausa a mano: sin monitor, todos; con monitor, solo ese. Quitar la pausa de un monitor
+    /// cuando estaban todos en pausa deja en pausa a los demás.
+    fn set_manual(&mut self, output: Option<String>, paused: bool) {
+        match (output, paused) {
+            (None, true) => self.system.manual_all = true,
+            (None, false) => {
+                self.system.manual_all = false;
+                self.manual.clear();
+            }
+            (Some(o), true) => {
+                self.manual.insert(o);
+            }
+            (Some(o), false) => {
+                if self.system.manual_all {
+                    self.system.manual_all = false;
+                    let all: Vec<String> = self
+                        .surface
+                        .as_ref()
+                        .map(|s| s.outputs())
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|i| i.name)
+                        .collect();
+                    self.manual.extend(all);
+                }
+                self.manual.remove(&o);
+            }
+        }
+        tracing::info!(all = self.system.manual_all, outputs = ?self.manual, "manual pause");
+    }
+
+    /// Pide a la superficie la pausa que corresponde en cada monitor con video. Devuelve si
+    /// cambió algo que `outputs` muestra.
+    fn update_pause(&mut self) -> bool {
+        let Some(surface) = self.surface.as_mut() else {
+            return false;
+        };
+        let mut changed = false;
+        self.paused.retain(|o, _| self.videos.contains(o));
+        self.pause_unsupported.retain(|o| self.videos.contains(o));
+        let mut videos: Vec<&String> = self.videos.iter().collect();
+        videos.sort();
+        for output in videos {
+            let mut signals = self.signals.get(output).copied().unwrap_or_default();
+            signals.manual = self.manual.contains(output);
+            let wanted = pause::decide(&self.pause_settings, &self.system, &signals);
+            match self.paused.get(output) {
+                Some(now) if now.is_some() == wanted.is_some() => {
+                    // Ya no se quiere pausa: el aviso de «no sabe pausar» sobra.
+                    if wanted.is_none() && self.pause_unsupported.remove(output) {
+                        changed = true;
+                    }
+                    if *now != wanted {
+                        // Sigue en pausa, por otro motivo: solo cambia lo que se muestra.
+                        self.paused.insert(output.clone(), wanted);
+                        changed = true;
+                    }
+                    continue;
+                }
+                _ => {}
+            }
+            match surface.set_paused(output, wanted.is_some()) {
+                Ok(()) => {
+                    if self.paused.insert(output.clone(), wanted) != Some(wanted) {
+                        changed = true;
+                    }
+                    if self.pause_unsupported.remove(output) {
+                        changed = true;
+                    }
+                    tracing::info!(output = %output, reason = wanted.map(|r| r.as_str()),
+                        "video pause");
+                }
+                Err(SurfaceError::PauseUnsupported) => {
+                    // Se sigue reproduciendo; se recuerda para no volver a pedirlo.
+                    self.paused.insert(output.clone(), None);
+                    if wanted.is_some() && self.pause_unsupported.insert(output.clone()) {
+                        tracing::info!(output = %output, "this surface cannot pause videos yet");
+                        changed = true;
+                    } else if wanted.is_none() && self.pause_unsupported.remove(output) {
+                        changed = true;
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(output = %output, code = e.as_str(), "could not change the video pause");
+                }
+            }
+        }
+        changed
     }
 
     /// Pregunta a la superficie por los videos cuyo momento llegó. Si uno no se ve por algo
@@ -596,6 +735,13 @@ impl Worker {
                             .copying
                             .get(&o.name)
                             .and_then(|(p, _)| self.jobs.get(p).copied()),
+                        paused: self
+                            .paused
+                            .get(&o.name)
+                            .copied()
+                            .flatten()
+                            .map(|r| r.as_str().to_string()),
+                        pause_unsupported: self.pause_unsupported.contains(&o.name),
                     }
                 })
                 .collect(),

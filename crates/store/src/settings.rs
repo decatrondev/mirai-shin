@@ -3,6 +3,7 @@
 //! conoce (si una versión nueva agregó ajustes, una vieja no los borra).
 
 use miraishin_core::copies::VideoSaver;
+use miraishin_core::pause::PauseSettings;
 use std::path::{Path, PathBuf};
 use toml_edit::{value, DocumentMut};
 
@@ -86,6 +87,9 @@ pub struct Settings {
     pub log_level: LogLevel,
     /// Copias de ahorro de los videos (fase 2.9): `auto`, `on` u `off`.
     pub video_saver: VideoSaver,
+    /// Cuándo se pausa el video solo (fase 3): `pause_on_fullscreen`, `pause_on_maximized`,
+    /// `pause_on_battery`, `pause_on_lock`, `pause_on_screen_off` (sí o no).
+    pub pause: PauseSettings,
 }
 
 /// Aviso al leer los ajustes: clave con valor no válido (se usó el valor por defecto),
@@ -137,6 +141,21 @@ impl Settings {
                 None => warnings.push(SettingsWarning::InvalidValue("video_saver")),
             }
         }
+        let p = &mut s.pause;
+        for (key, field) in [
+            ("pause_on_fullscreen", &mut p.on_fullscreen),
+            ("pause_on_maximized", &mut p.on_maximized),
+            ("pause_on_battery", &mut p.on_battery),
+            ("pause_on_lock", &mut p.on_lock),
+            ("pause_on_screen_off", &mut p.on_screen_off),
+        ] {
+            if let Some(item) = doc.get(key) {
+                match item.as_bool() {
+                    Some(b) => *field = b,
+                    None => warnings.push(SettingsWarning::InvalidValue(key)),
+                }
+            }
+        }
         (s, warnings)
     }
 
@@ -165,6 +184,16 @@ impl Settings {
         doc["language"] = value(self.language.as_str());
         doc["log_level"] = value(self.log_level.as_str());
         doc["video_saver"] = value(self.video_saver.as_str());
+        let p = &self.pause;
+        for (key, v) in [
+            ("pause_on_fullscreen", p.on_fullscreen),
+            ("pause_on_maximized", p.on_maximized),
+            ("pause_on_battery", p.on_battery),
+            ("pause_on_lock", p.on_lock),
+            ("pause_on_screen_off", p.on_screen_off),
+        ] {
+            doc[key] = value(v);
+        }
         doc.to_string()
     }
 }
@@ -201,6 +230,12 @@ mod tests {
         let (s, w) = Settings::parse("video_saver = \"siempre\"\n");
         assert_eq!(s.video_saver, VideoSaver::Auto);
         assert_eq!(w, vec![SettingsWarning::InvalidValue("video_saver")]);
+        let (s, w) = Settings::parse(
+            "pause_on_battery = false\npause_on_maximized = true\npause_on_lock = \"no\"\n",
+        );
+        assert!(!s.pause.on_battery && s.pause.on_maximized && s.pause.on_lock);
+        assert!(s.pause.on_fullscreen && s.pause.on_screen_off);
+        assert_eq!(w, vec![SettingsWarning::InvalidValue("pause_on_lock")]);
         let (s, w) = Settings::parse("esto no es toml = = =");
         assert_eq!(s, Settings::default());
         assert_eq!(w, vec![SettingsWarning::UnreadableFile]);

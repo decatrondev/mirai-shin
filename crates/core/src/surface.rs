@@ -164,6 +164,8 @@ pub enum SurfaceError {
     /// El video no se pudo reproducir; el código dice por qué (`mpv_unavailable`,
     /// `video_no_gpu`, `video_no_decoder`, `video_unplayable`, `video_gl_failed`).
     Video(&'static str),
+    /// Esta superficie todavía no sabe pausar un video (fase 3): se sigue reproduciendo.
+    PauseUnsupported,
 }
 
 impl SurfaceError {
@@ -175,6 +177,7 @@ impl SurfaceError {
             Self::Disconnected => "disconnected",
             Self::VideoUnsupported => "video_unsupported",
             Self::Video(code) => code,
+            Self::PauseUnsupported => "pause_unsupported",
         }
     }
 }
@@ -216,6 +219,14 @@ pub trait Surface: Send {
     fn video_problem(&self, output: &str) -> Option<String> {
         let _ = output;
         None
+    }
+
+    /// Pausa (`true`) o vuelve a reproducir el video de un monitor (fase 3). Se queda el
+    /// último cuadro en pantalla. Se puede llamar varias veces con lo mismo. Sin video en ese
+    /// monitor no hace nada. Las que todavía no saben responden `PauseUnsupported`.
+    fn set_paused(&mut self, output: &str, paused: bool) -> Result<(), SurfaceError> {
+        let _ = (output, paused);
+        Err(SurfaceError::PauseUnsupported)
     }
 
     /// Quita el fondo de un monitor (vuelve a verse el del sistema).

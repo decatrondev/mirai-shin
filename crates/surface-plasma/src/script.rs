@@ -43,14 +43,40 @@ pub fn image_entries(url: &str) -> Vec<(&'static str, String)> {
     vec![("Image", url.to_string()), ("Video", String::new())]
 }
 
-/// Configuración para reproducir un video. El modo antes que el video, para que arranque
-/// ya encuadrado; la imagen anterior la suelta el complemento cuando el video se ve.
-pub fn video_entries(url: &str, mode: &str) -> Vec<(&'static str, String)> {
+/// Configuración para reproducir un video. El modo y la pausa antes que el video, para que
+/// arranque ya encuadrado (y en pausa si toca); la imagen anterior la suelta el complemento
+/// cuando el video se ve.
+pub fn video_entries(url: &str, mode: &str, paused: bool) -> Vec<(&'static str, String)> {
     vec![
         ("Mode", mode.to_string()),
+        ("Paused", paused_value(paused)),
         ("Video", url.to_string()),
         ("Image", String::new()),
     ]
+}
+
+/// Valor de la clave `Paused` (fase 3).
+pub fn paused_value(paused: bool) -> String {
+    if paused { "true" } else { "" }.to_string()
+}
+
+/// Escribe claves en la configuración de nuestro complemento en la pantalla de `output`, sin
+/// cambiar el tipo de fondo. Imprime `ok:` o `none` si ahí no está el nuestro.
+pub fn write(output: &str, entries: &[(&str, &str)], plugin_id: &str) -> String {
+    let writes: String = entries
+        .iter()
+        .map(|(k, v)| format!("\n  d.writeConfig({}, {});", lit(k), lit(v)))
+        .collect();
+    format!(
+        "var s = screenForConnector({out});
+var d = s >= 0 ? desktopForScreen(s) : undefined;
+if (!d || d.wallpaperPlugin != {id}) {{ print(\"none\"); }} else {{
+  d.currentConfigGroup = [\"Wallpaper\", {id}, \"General\"];{writes}
+  print(\"ok:\");
+}}",
+        out = lit(output),
+        id = lit(plugin_id),
+    )
 }
 
 /// Devuelve el tipo de fondo anterior en la pantalla de `output`, si tiene el nuestro.
@@ -150,10 +176,19 @@ mod tests {
             image_entries("file:///a.png"),
             vec![("Image", "file:///a.png".into()), ("Video", String::new())]
         );
-        let v = video_entries("file:///v.mp4", "fit");
+        let v = video_entries("file:///v.mp4", "fit", false);
         assert_eq!(v[0], ("Mode", "fit".into()));
-        assert_eq!(v[1], ("Video", "file:///v.mp4".into()));
-        assert_eq!(v[2], ("Image", String::new()));
+        assert_eq!(v[1], ("Paused", String::new()));
+        assert_eq!(v[2], ("Video", "file:///v.mp4".into()));
+        assert_eq!(v[3], ("Image", String::new()));
+        assert_eq!(
+            video_entries("file:///v.mp4", "fill", true)[1],
+            ("Paused", "true".into())
+        );
+        let w = write("DP-1", &[("Paused", "true")], "net.x.Y");
+        assert!(w.contains(r#"d.wallpaperPlugin != "net.x.Y""#));
+        assert!(w.contains(r#"d.writeConfig("Paused", "true");"#));
+        assert!(!w.contains("d.wallpaperPlugin ="));
     }
 
     #[test]

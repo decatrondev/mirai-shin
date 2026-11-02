@@ -4,6 +4,8 @@
 // - `Image`: file:// de un cuadro fijo, ya al tamaño exacto del monitor.
 // - `Video` + `Mode`: file:// de un video que se reproduce aquí, en bucle y sin sonido, con
 //   el MediaPlayer de QtMultimedia. `Mode` = fill, fit, stretch o center.
+// - `Paused`: "true" = el video queda en pausa en su último cuadro (fase 3). Un video nuevo
+//   en pausa se detiene en cuanto muestra su primer cuadro.
 // Y deja escrito para el daemon (lo lee por D-Bus):
 // - `Status`: estado del video: "" (sin video), `loading`, `playing`, o el código del problema
 //   (`video_no_decoder`, `video_unreadable`, `video_unplayable`, `video_no_frames`,
@@ -21,6 +23,12 @@ WallpaperItem {
     readonly property string wantedImage: root.configuration.Image || ""
     readonly property string wantedVideo: root.configuration.Video || ""
     readonly property string mode: root.configuration.Mode || "fill"
+    readonly property bool paused: root.configuration.Paused === "true"
+
+    onPausedChanged: {
+        for (let i = 0; i < slots.count; i++)
+            slots.itemAt(i).applyPause();
+    }
 
     // Grafito del sistema de diseño: se ve hasta que llega algo, en los bordes de «ajustar»
     // y si el video no se puede reproducir.
@@ -181,6 +189,21 @@ WallpaperItem {
                 player.play();
                 noFrames.restart();
             }
+            // En pausa no llegan cuadros: se deja de medir (si no, se daría por lento) y se
+            // vuelve a empezar al reanudar. Antes del primer cuadro no se pausa todavía.
+            function applyPause() {
+                if (url === "" || !firstFrame)
+                    return;
+                if (root.paused) {
+                    player.pause();
+                    meter.stop();
+                } else {
+                    frames = 0;
+                    slowWindows = 0;
+                    player.play();
+                    meter.restart();
+                }
+            }
             function unload() {
                 noFrames.stop();
                 meter.stop();
@@ -217,7 +240,10 @@ WallpaperItem {
                         slot.firstFrame = true;
                         noFrames.stop();
                         slot.frames = 0;
-                        meter.restart();
+                        if (root.paused)
+                            player.pause();
+                        else
+                            meter.restart();
                         root.promote(slot);
                     }
                 }

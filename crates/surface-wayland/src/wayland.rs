@@ -88,6 +88,7 @@ enum Command {
     Show(String, Frame),
     ShowVideo(String, PathBuf, FitMode, VideoReply),
     Clear(String),
+    SetPaused(String, bool),
     Shutdown,
 }
 
@@ -209,6 +210,11 @@ impl Surface for WaylandSurface {
         self.output(output)?;
         self.send(Command::Clear(output.to_string()))
     }
+
+    fn set_paused(&mut self, output: &str, paused: bool) -> Result<(), SurfaceError> {
+        self.output(output)?;
+        self.send(Command::SetPaused(output.to_string(), paused))
+    }
 }
 
 impl Drop for WaylandSurface {
@@ -253,6 +259,14 @@ struct VideoTarget {
     frame_pending: bool,
     /// Hay un cuadro nuevo esperando ese aviso.
     redraw: bool,
+    /// En pausa (fase 3): no se dibuja más, queda el último cuadro. Si el reproductor lo
+    /// comparte otro monitor que no está en pausa, mpv sigue y solo este deja de dibujar.
+    paused: bool,
+    /// Ya se puso un cuadro de verdad del video (en pausa se espera a tenerlo antes de
+    /// dejar de dibujar; el primer dibujo, al ponerlo, puede ser antes de que mpv tenga uno).
+    drawn: bool,
+    /// mpv avisó un cuadro nuevo que todavía no se puso.
+    fresh: bool,
 }
 
 /// Un reproductor compartido y el contexto OpenGL en que dibuja.
@@ -389,6 +403,7 @@ fn run(
             let _ = reply.send(state.show_video(&name, path, mode));
         }
         ChannelEvent::Msg(Command::Clear(name)) => state.clear(&name),
+        ChannelEvent::Msg(Command::SetPaused(name, paused)) => state.set_paused(&name, paused),
         ChannelEvent::Msg(Command::Shutdown) | ChannelEvent::Closed => state.exit = true,
     });
     if inserted.is_err() {
@@ -658,6 +673,9 @@ impl State {
             pixels,
             frame_pending: false,
             redraw: true,
+            paused: false,
+            drawn: false,
+            fresh: false,
         };
         let old = self.outputs[i].background.as_mut().and_then(|bg| {
             bg.pending = None;
@@ -739,6 +757,40 @@ impl State {
         drop(window);
     }
 
+    /// Pausa o reanuda el video de un monitor. mpv se pausa solo si todos los monitores que
+    /// lo comparten están en pausa.
+    fn set_paused(&mut self, name: &str, paused: bool) {
+        let Some(i) = self.outputs.iter().position(|o| o.info.name == name) else {
+            return;
+        };
+        let Some(v) = self.outputs[i]
+            .background
+            .as_mut()
+            .and_then(|b| b.video.as_mut())
+        else {
+            return;
+        };
+        let key = v.key.clone();
+        v.paused = paused;
+        if !paused {
+            v.redraw = true;
+        }
+        let all_paused = self.outputs.iter().all(|o| {
+            o.background
+                .as_ref()
+                .and_then(|b| b.video.as_ref())
+                .is_none_or(|v| v.key != key || v.paused)
+        });
+        if let Some(slot) = self.players.get(&key) {
+            if let Err(e) = slot.player.set_paused(all_paused) {
+                tracing::warn!(code = e.as_str(), "video: could not change the pause");
+            }
+        }
+        if !paused {
+            self.render_output(i);
+        }
+    }
+
     /// libmpv avisó: eventos y cuadros nuevos.
     fn on_mpv(&mut self) {
         let keys: Vec<VideoKey> = self.players.keys().cloned().collect();
@@ -760,6 +812,7 @@ impl State {
                 {
                     Some(v) if v.key == key => {
                         v.redraw = true;
+                        v.fresh = true;
                         v.frame_pending
                     }
                     _ => continue,
@@ -787,6 +840,10 @@ impl State {
         let Some(v) = bg.video.as_mut() else {
             return;
         };
+        // En pausa queda el último cuadro puesto (si ya hay uno).
+        if v.paused && v.drawn {
+            return;
+        }
         let Some(slot) = self.players.get(&v.key) else {
             return;
         };
@@ -804,6 +861,10 @@ impl State {
             slot.player.report_swap();
             v.frame_pending = true;
             v.redraw = false;
+            if v.fresh {
+                v.drawn = true;
+                v.fresh = false;
+            }
             // El primer cuadro del video ya está puesto: se suelta la imagen anterior.
             bg.shown = None;
         }

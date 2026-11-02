@@ -18,6 +18,9 @@ pub mod methods {
     pub const OUTPUTS_LIST: &str = "outputs.list";
     pub const WALLPAPER_SET: &str = "wallpaper.set";
     pub const WALLPAPER_CLEAR: &str = "wallpaper.clear";
+    /// Pausa a mano el video (fase 3): de todos los monitores o de uno.
+    pub const PLAYBACK_PAUSE: &str = "playback.pause";
+    pub const PLAYBACK_RESUME: &str = "playback.resume";
 }
 
 pub mod events {
@@ -212,6 +215,13 @@ pub struct OutputItem {
     /// Mientras se crea esa copia, cuánto va (0–100). Se sigue viendo el fondo anterior.
     #[serde(default)]
     pub copy_progress: Option<u8>,
+    /// Si el video está en pausa, por qué (`manual`, `locked`, `screen_off`, `battery`,
+    /// `fullscreen`, `maximized`). Solo con un video puesto.
+    #[serde(default)]
+    pub paused: Option<String>,
+    /// Se pidió una pausa pero este escritorio todavía no sabe pausar (`paused` vacío).
+    #[serde(default)]
+    pub pause_unsupported: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -238,6 +248,14 @@ pub struct WallpaperSetParams {
     /// `fill` (por defecto), `fit`, `stretch`, `center`.
     #[serde(default)]
     pub mode: Option<String>,
+}
+
+/// Para `playback.pause` y `playback.resume`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct PlaybackParams {
+    /// Sin monitor: todos.
+    #[serde(default)]
+    pub output: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

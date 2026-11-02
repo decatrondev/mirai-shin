@@ -21,6 +21,10 @@
     <entry name="Status" type="String">
       <default></default>
     </entry>
+    <!-- Paused: "true" = el video queda en pausa en su último cuadro (fase 3). -->
+    <entry name="Paused" type="String">
+      <default></default>
+    </entry>
     <!-- Fps: cuadros por segundo que llegan a la pantalla / los del video (p. ej. 29.8/30.0). -->
     <entry name="Fps" type="String">
       <default></default>

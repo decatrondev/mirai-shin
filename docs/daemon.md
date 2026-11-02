@@ -26,6 +26,8 @@ A console tool to talk to the daemon, shipped with the app for diagnostics and s
 | `outputs` | Monitors (name, size, scale) and what each one shows |
 | `set <folder> [--monitor <name>] [--mode <mode>]` | Sets a wallpaper. Without `--monitor`, the same one on all monitors (and drops what each monitor had). Modes: `fill` (default, crops), `fit` (borders), `stretch`, `center` (real size) |
 | `clear [--monitor <name>]` | Removes the wallpaper. With `--monitor`, that monitor stays without one even if there is one for all |
+| `pause [--monitor <name>]` | Pauses the video wallpaper (the last frame stays on screen) until `resume` or until the daemon restarts. Images do not change. `outputs` shows `paused: by you` |
+| `resume [--monitor <name>]` | Plays again what `pause` stopped. Resuming one monitor while all were paused leaves the others paused |
 | `ping` | Checks that the daemon answers |
 | `shutdown` | Stops the daemon |
 
@@ -40,6 +42,8 @@ Where the wallpaper cannot be shown yet (X11, GNOME), `set` still saves the choi
 On KDE Plasma the daemon installs its wallpaper add-on in `~/.local/share/plasma/wallpapers/` and switches each screen to it; `clear` gives the screen back the wallpaper type it had before. The first time, Plasma may need a restart (log out and back in) to see the add-on: `status` says so. Videos are played by Plasma inside the add-on (Qt Multimedia), with the decoders your distribution installs. When you change videos, the previous one stays on screen until the new one has its first frame. The add-on tells the daemon whether the video is really showing, and `outputs` explains it when it is not: `video_no_decoder` (Plasma has no decoder for that format, for example HEVC on some distributions; the screen shows the graphite color), `video_no_frames` (the video opened but no frame reached the screen in 10 seconds; graphite color) and `video_too_slow` (fewer than 80 % of the frames and fewer than 24 per second reach the screen, so it stutters; common in virtual machines). None of these is an error in the app: a lower-resolution video (for example 720p) or WebM usually works.
 
 On Windows the daemon puts one window per monitor behind the desktop icons; clicks go to the icons and to the desktop as usual. Windows has two desktop layouts and the daemon detects which one is there: `status` shows `windows_raised` (Windows 11 24H2 and later) or `windows_classic` (Windows 10, Windows 11 up to 23H2). Videos are drawn by libmpv (`libmpv-2.dll`, next to the daemon) with Direct3D 11; without it, a video shows the fallback color and `outputs` says why. If File Explorer restarts, the wallpaper comes back by itself, videos included. If the wallpaper does not show, the variable `MIRAISHIN_WORKERW` changes what the daemon asks Explorer to prepare: `auto` (default), `none`, or two numbers such as `0,0` or `0xD,1`; it is a diagnostic aid while the Windows version is being tested.
+
+A paused video stops decoding: on Sway and Hyprland mpv pauses (if two monitors share the same video and only one is paused, mpv keeps playing for the other and the paused one stops drawing); on KDE Plasma the add-on pauses its player. `outputs` shows why each monitor is paused. Windows cannot pause yet: `pause` says so and the video keeps playing (not an error).
 
 Add `--json` to print the daemon's raw answer. Exit codes: `0` ok, `1` error, `2` the daemon is not running (not a failure). The texts follow the language in the settings or, if it is `system`, `LANG`.
 
@@ -64,7 +68,14 @@ wallpapers_dir = "/home/ana/Wallpapers"  # optional; default: the folder above
 language = "system"                       # system, es, en
 log_level = "info"                        # error, warn, info, debug, trace
 video_saver = "auto"                      # auto, on, off (see "Compatible copies")
+pause_on_fullscreen = true                # pause the video when an app is in full screen on that monitor
+pause_on_maximized = false                # … when a window is maximized on that monitor
+pause_on_battery = true                   # … when the computer runs on battery
+pause_on_lock = true                      # … when the session is locked
+pause_on_screen_off = true                # … when that monitor's screen is off
 ```
+
+The `pause_on_*` keys are read now but act only as each signal arrives (phase 3: battery, full screen, lock and screen off come in the next steps).
 
 Every key is optional. An invalid value uses its default and is noted in the log. Keys this version does not know are kept when the settings are saved. `RUST_LOG` overrides `log_level` for debugging.
 

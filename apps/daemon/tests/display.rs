@@ -9,7 +9,7 @@ use miraishin_daemon::{run, RunConfig};
 use miraishin_ipc::{codes, events, methods, CallError, Client, Endpoint};
 use miraishin_store::Paths;
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -24,6 +24,9 @@ struct Screen {
     video_problems: HashMap<String, String>,
     /// Todo lo que se mandó a reproducir, en orden.
     history: Vec<String>,
+    /// Sabe pausar (fase 3) y monitores con el video en pausa.
+    pauses: bool,
+    paused: HashSet<String>,
     sink: Option<EventSink>,
 }
 
@@ -62,12 +65,26 @@ impl Surface for FakeSurface {
             return Err(SurfaceError::UnknownOutput);
         }
         s.frames.remove(output);
+        // Un video recién puesto arranca reproduciéndose.
+        s.paused.remove(output);
         s.history.push(video.to_string_lossy().into_owned());
         s.videos.insert(output.into(), (video.to_path_buf(), mode));
         Ok(())
     }
     fn video_problem(&self, output: &str) -> Option<String> {
         self.0.lock().unwrap().video_problems.get(output).cloned()
+    }
+    fn set_paused(&mut self, output: &str, paused: bool) -> Result<(), SurfaceError> {
+        let mut s = self.0.lock().unwrap();
+        if !s.pauses {
+            return Err(SurfaceError::PauseUnsupported);
+        }
+        if paused {
+            s.paused.insert(output.into());
+        } else {
+            s.paused.remove(output);
+        }
+        Ok(())
     }
     fn clear(&mut self, output: &str) -> Result<(), SurfaceError> {
         let mut s = self.0.lock().unwrap();
@@ -693,5 +710,114 @@ async fn copias_compatibles() {
     wait_for(|| color(&screen, "DP-1") == Some(FALLBACK)).await;
     let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
     assert_eq!(list["items"][0]["problem"], json!("video_damaged"));
+    stop(c, task).await;
+}
+
+fn paused(list: &Value, output: &str) -> Value {
+    list["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["name"] == json!(output))
+        .unwrap()["paused"]
+        .clone()
+}
+
+#[tokio::test]
+async fn pausa_a_mano() {
+    let t = tempfile::tempdir().unwrap();
+    let paths = Paths::under(t.path());
+    let ep = endpoint(t.path());
+    let wall = paths.default_wallpapers_dir();
+    video_wallpaper(&wall, "olas");
+    video_wallpaper(&wall, "nubes");
+    image_wallpaper(&wall, "rojo", RED);
+    let screen: Shared = Arc::new(Mutex::new(Screen {
+        outputs: vec![
+            out("DP-1", 100, 50, 120),
+            out("HDMI-A-1", 40, 40, 120),
+            out("eDP-1", 40, 40, 120),
+        ],
+        plays_video: true,
+        pauses: true,
+        ..Screen::default()
+    }));
+    let task = start(&paths, &ep, &screen);
+    let mut c = connect(&ep).await;
+    let set = |folder: &str, output: Option<&str>| json!({"folder": folder, "output": output});
+    c.call(methods::WALLPAPER_SET, set("olas", None))
+        .await
+        .unwrap();
+    c.call(methods::WALLPAPER_SET, set("rojo", Some("eDP-1")))
+        .await
+        .unwrap();
+    let paused_set = |s: &Shared| {
+        let mut v: Vec<String> = s.lock().unwrap().paused.iter().cloned().collect();
+        v.sort();
+        v
+    };
+
+    // Todos: los dos con video quedan en pausa; el de la imagen no tiene nada que pausar.
+    let r = c.call(methods::PLAYBACK_PAUSE, Value::Null).await.unwrap();
+    assert_eq!(paused_set(&screen), vec!["DP-1", "HDMI-A-1"]);
+    assert_eq!(paused(&r, "DP-1"), json!("manual"));
+    assert_eq!(paused(&r, "eDP-1"), Value::Null);
+
+    // Un video nuevo mientras está en pausa: también queda en pausa.
+    c.call(methods::WALLPAPER_SET, set("nubes", Some("DP-1")))
+        .await
+        .unwrap();
+    assert_eq!(paused_set(&screen), vec!["DP-1", "HDMI-A-1"]);
+
+    // Quitar la pausa de uno deja al otro en pausa.
+    let r = c
+        .call(methods::PLAYBACK_RESUME, json!({"output": "DP-1"}))
+        .await
+        .unwrap();
+    assert_eq!(paused_set(&screen), vec!["HDMI-A-1"]);
+    assert_eq!(paused(&r, "DP-1"), Value::Null);
+    assert_eq!(paused(&r, "HDMI-A-1"), json!("manual"));
+
+    // Uno solo, y quitar todas.
+    c.call(methods::PLAYBACK_PAUSE, json!({"output": "DP-1"}))
+        .await
+        .unwrap();
+    assert_eq!(paused_set(&screen), vec!["DP-1", "HDMI-A-1"]);
+    let r = c.call(methods::PLAYBACK_RESUME, Value::Null).await.unwrap();
+    assert!(paused_set(&screen).is_empty());
+    assert_eq!(paused(&r, "HDMI-A-1"), Value::Null);
+
+    // Monitor que no existe.
+    assert_eq!(
+        code(
+            c.call(methods::PLAYBACK_PAUSE, json!({"output": "VGA-9"}))
+                .await
+        ),
+        codes::UNKNOWN_OUTPUT
+    );
+    stop(c, task).await;
+}
+
+#[tokio::test]
+async fn superficie_que_no_sabe_pausar() {
+    let t = tempfile::tempdir().unwrap();
+    let paths = Paths::under(t.path());
+    let ep = endpoint(t.path());
+    video_wallpaper(&paths.default_wallpapers_dir(), "olas");
+    let screen: Shared = Arc::new(Mutex::new(Screen {
+        outputs: vec![out("DP-1", 100, 50, 120)],
+        plays_video: true,
+        ..Screen::default()
+    }));
+    let task = start(&paths, &ep, &screen);
+    let mut c = connect(&ep).await;
+    c.call(methods::WALLPAPER_SET, json!({"folder": "olas"}))
+        .await
+        .unwrap();
+    let r = c.call(methods::PLAYBACK_PAUSE, Value::Null).await.unwrap();
+    assert_eq!(paused(&r, "DP-1"), Value::Null);
+    assert_eq!(r["items"][0]["pause_unsupported"], json!(true));
+    let r = c.call(methods::PLAYBACK_RESUME, Value::Null).await.unwrap();
+    assert_eq!(r["items"][0]["pause_unsupported"], json!(false));
     stop(c, task).await;
 }

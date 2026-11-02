@@ -5,8 +5,8 @@ use miraishin_store::Language;
 /// (clave, español, inglés). `{}` se reemplaza en orden con `fill`.
 const TEXTS: &[(&str, &str, &str)] = &[
     ("usage",
-     "{} — consola del daemon\n\nUso: miraishin-ctl <comando> [opciones] [--json]\n\nComandos:\n  status                 estado del daemon, de la biblioteca y del fondo en pantalla\n  list                   fondos de la biblioteca (válidos e inválidos)\n  rescan                 vuelve a leer la carpeta de fondos\n  outputs                monitores y el fondo de cada uno\n  set <carpeta>          pone un fondo (por defecto en todos los monitores)\n      --monitor <nombre>   solo en ese monitor (ver «outputs»)\n      --mode <modo>        fill (rellenar, por defecto), fit (ajustar), stretch (estirar), center (centrar)\n  clear                  quita el fondo de todos los monitores\n      --monitor <nombre>   solo de ese monitor\n  ping                   comprueba que el daemon responde\n  shutdown               apaga el daemon\n\n--json     muestra la respuesta tal cual, en JSON",
-     "{} — daemon console\n\nUsage: miraishin-ctl <command> [options] [--json]\n\nCommands:\n  status                 daemon, library and on-screen wallpaper status\n  list                   wallpapers in the library (valid and invalid)\n  rescan                 read the wallpapers folder again\n  outputs                monitors and the wallpaper on each one\n  set <folder>           set a wallpaper (on all monitors by default)\n      --monitor <name>     only on that monitor (see \"outputs\")\n      --mode <mode>        fill (default), fit, stretch, center\n  clear                  remove the wallpaper from all monitors\n      --monitor <name>     only from that monitor\n  ping                   check that the daemon answers\n  shutdown               stop the daemon\n\n--json     print the raw JSON answer"),
+     "{} — consola del daemon\n\nUso: miraishin-ctl <comando> [opciones] [--json]\n\nComandos:\n  status                 estado del daemon, de la biblioteca y del fondo en pantalla\n  list                   fondos de la biblioteca (válidos e inválidos)\n  rescan                 vuelve a leer la carpeta de fondos\n  outputs                monitores y el fondo de cada uno\n  set <carpeta>          pone un fondo (por defecto en todos los monitores)\n      --monitor <nombre>   solo en ese monitor (ver «outputs»)\n      --mode <modo>        fill (rellenar, por defecto), fit (ajustar), stretch (estirar), center (centrar)\n  clear                  quita el fondo de todos los monitores\n      --monitor <nombre>   solo de ese monitor\n  pause                  pausa el video de fondo en todos los monitores (hasta «resume» o reiniciar el daemon)\n      --monitor <nombre>   solo en ese monitor\n  resume                 vuelve a reproducir el video pausado con «pause»\n      --monitor <nombre>   solo en ese monitor\n  ping                   comprueba que el daemon responde\n  shutdown               apaga el daemon\n\n--json     muestra la respuesta tal cual, en JSON",
+     "{} — daemon console\n\nUsage: miraishin-ctl <command> [options] [--json]\n\nCommands:\n  status                 daemon, library and on-screen wallpaper status\n  list                   wallpapers in the library (valid and invalid)\n  rescan                 read the wallpapers folder again\n  outputs                monitors and the wallpaper on each one\n  set <folder>           set a wallpaper (on all monitors by default)\n      --monitor <name>     only on that monitor (see \"outputs\")\n      --mode <mode>        fill (default), fit, stretch, center\n  clear                  remove the wallpaper from all monitors\n      --monitor <name>     only from that monitor\n  pause                  pause the video wallpaper on all monitors (until \"resume\" or a daemon restart)\n      --monitor <name>     only on that monitor\n  resume                 play again the video paused with \"pause\"\n      --monitor <name>     only on that monitor\n  ping                   check that the daemon answers\n  shutdown               stop the daemon\n\n--json     print the raw JSON answer"),
     ("unknown_option", "Opción desconocida: {}", "Unknown option: {}"),
     ("missing_value", "Falta el valor de {}", "Missing the value of {}"),
     ("extra_argument", "Sobra: {}", "Unexpected: {}"),
@@ -98,6 +98,19 @@ const TEXTS: &[(&str, &str, &str)] = &[
      "{}: este equipo no puede reproducir el video tal cual, y para crear una copia compatible hace falta ffmpeg (la versión Flatpak ya lo trae; fuera de ella, instala el paquete «ffmpeg»). Se ve el color de respaldo",
      "{}: this computer cannot play the video as it is, and making a compatible copy needs ffmpeg (the Flatpak version already includes it; otherwise install the \"ffmpeg\" package). The fallback color shows"),
     ("outputs_empty", "sin fondo", "no wallpaper"),
+    ("outputs_paused", "en pausa: {}", "paused: {}"),
+    ("pause_manual", "a mano", "by you"),
+    ("pause_locked", "pantalla bloqueada", "screen locked"),
+    ("pause_screen_off", "pantalla apagada", "screen off"),
+    ("pause_battery", "con batería", "on battery"),
+    ("pause_fullscreen", "app en pantalla completa", "app in full screen"),
+    ("pause_maximized", "ventana maximizada", "maximized window"),
+    ("paused_done", "Listo. Los videos quedan en pausa hasta «resume» (o hasta reiniciar el daemon); las imágenes no cambian.",
+     "Done. Videos stay paused until \"resume\" (or until the daemon restarts); images do not change."),
+    ("resumed_done", "Listo. Los videos se reproducen, salvo que otra cosa los pause (se dice en cada monitor).",
+     "Done. Videos are playing, unless something else pauses them (shown on each monitor)."),
+    ("pause_unsupported", "Este escritorio todavía no puede pausar el video: se sigue reproduciendo. No es un error; llega en una próxima versión.",
+     "This desktop cannot pause the video yet: it keeps playing. This is not an error; it comes in an upcoming version."),
     ("unknown_command", "Comando desconocido: {}", "Unknown command: {}"),
     ("not_running",
      "El daemon no está corriendo. No es un error: arráncalo con miraishin-daemon.",
@@ -189,6 +202,21 @@ mod tests {
             let key = format!("problem_{code}");
             assert!(!t(Language::Es, &key).is_empty(), "{key}");
             assert_eq!(t(Language::En, &key).matches("{}").count(), 1, "{key}");
+        }
+    }
+
+    #[test]
+    fn cada_motivo_de_pausa_tiene_texto() {
+        for code in [
+            "manual",
+            "locked",
+            "screen_off",
+            "battery",
+            "fullscreen",
+            "maximized",
+        ] {
+            let key = format!("pause_{code}");
+            assert!(!t(Language::Es, &key).is_empty(), "{key}");
         }
     }
 

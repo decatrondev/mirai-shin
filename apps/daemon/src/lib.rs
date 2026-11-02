@@ -8,8 +8,8 @@ use display::{Display, SurfaceFactory};
 use miraishin_core::fit::FitMode;
 use miraishin_ipc::{
     codes, events, methods, serve, BindError, Endpoint, Event, Handler, HandlerFuture, HelloParams,
-    HelloResult, LibraryItem, LibraryList, Listener, RescanResult, RpcError, StatusResult,
-    WallpaperClearParams, WallpaperSetParams, PROTOCOL_VERSION,
+    HelloResult, LibraryItem, LibraryList, Listener, PlaybackParams, RescanResult, RpcError,
+    StatusResult, WallpaperClearParams, WallpaperSetParams, PROTOCOL_VERSION,
 };
 use miraishin_license::LicenseProvider;
 use miraishin_store::library::StoreError;
@@ -33,6 +33,8 @@ pub const METHODS: &[&str] = &[
     methods::OUTPUTS_LIST,
     methods::WALLPAPER_SET,
     methods::WALLPAPER_CLEAR,
+    methods::PLAYBACK_PAUSE,
+    methods::PLAYBACK_RESUME,
 ];
 
 pub struct RunConfig {
@@ -158,6 +160,7 @@ pub async fn run(config: RunConfig) -> Result<(), RunError> {
                 check_delays: env.check_delays,
             }
         },
+        settings.pause,
     );
     let (surface_name, surface_ok) = screen.surface();
     tracing::info!(
@@ -308,6 +311,21 @@ impl Daemon {
         to_value(self.display.outputs().await)
     }
 
+    /// Pausa a mano o la quita (fase 3). Responde con los monitores, como `set`.
+    async fn playback(&self, params: Value, paused: bool) -> Result<Value, RpcError> {
+        let p: PlaybackParams = if params.is_null() {
+            PlaybackParams::default()
+        } else {
+            parse(params)?
+        };
+        let output = match self.checked_output(p.output).await? {
+            o if o == ALL_OUTPUTS => None,
+            o => Some(o),
+        };
+        self.display.pause(output, paused).await;
+        to_value(self.display.outputs().await)
+    }
+
     /// Monitor pedido, o «todos». Si hay superficie, el monitor tiene que estar conectado;
     /// si no la hay (todavía), se guarda igual para cuando la haya.
     async fn checked_output(&self, output: Option<String>) -> Result<String, RpcError> {
@@ -415,6 +433,8 @@ impl Handler for Daemon {
                     };
                     self.clear_wallpaper(p).await
                 }
+                methods::PLAYBACK_PAUSE => self.playback(params, true).await,
+                methods::PLAYBACK_RESUME => self.playback(params, false).await,
                 methods::SHUTDOWN => {
                     self.shutdown.notify_one();
                     Ok(json!({ "stopping": true }))

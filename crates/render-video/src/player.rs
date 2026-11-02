@@ -162,6 +162,11 @@ impl Player {
         p.load(path, timeout)
     }
 
+    /// Pausa (`true`) o reanuda. En pausa mpv deja de decodificar y queda el último cuadro.
+    pub fn set_paused(&self, paused: bool) -> Result<(), VideoError> {
+        self.command(&["set", "pause", if paused { "yes" } else { "no" }])
+    }
+
     fn set(&self, name: &str, value: &str) -> bool {
         let (Ok(n), Ok(v)) = (CString::new(name), CString::new(value)) else {
             return false;

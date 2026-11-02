@@ -26,6 +26,8 @@ pub struct PlasmaSurface {
     current: HashMap<String, PathBuf>,
     /// Monitores donde se pidió un video (solo a esos se les pregunta su estado).
     videos: HashSet<String>,
+    /// Monitores con el video en pausa (fase 3).
+    paused: HashSet<String>,
     counter: u64,
 }
 
@@ -59,6 +61,7 @@ impl PlasmaSurface {
             previous,
             current: HashMap::new(),
             videos: HashSet::new(),
+            paused: HashSet::new(),
             counter: 0,
         };
         surface.forget_old_frames();
@@ -140,6 +143,7 @@ impl Surface for PlasmaSurface {
         match self.put(output, &entries) {
             Ok(()) => {
                 self.videos.remove(output);
+                self.paused.remove(output);
                 if let Some(old) = self.current.insert(output.to_string(), path) {
                     let _ = std::fs::remove_file(old);
                 }
@@ -161,7 +165,11 @@ impl Surface for PlasmaSurface {
         mode: FitMode,
     ) -> Result<(), SurfaceError> {
         self.output(output)?;
-        let entries = script::video_entries(&script::file_url(video), mode.as_str());
+        let entries = script::video_entries(
+            &script::file_url(video),
+            mode.as_str(),
+            self.paused.contains(output),
+        );
         self.put(output, &entries)?;
         self.videos.insert(output.to_string());
         // El PNG anterior ya no hace falta: el complemento suelta la imagen al ver el video.
@@ -185,8 +193,36 @@ impl Surface for PlasmaSurface {
         script::parse_status(&reply)
     }
 
+    /// El complemento pausa su reproductor al ver `Paused` (y deja de medir los cuadros).
+    fn set_paused(&mut self, output: &str, paused: bool) -> Result<(), SurfaceError> {
+        self.output(output)?;
+        if !self.videos.contains(output) {
+            return Ok(());
+        }
+        let value = script::paused_value(paused);
+        let reply = eval(
+            &self.dbus,
+            &script::write(output, &[("Paused", &value)], package::plugin_id()),
+        );
+        match reply.as_deref().map(str::trim) {
+            Ok("ok:") => {
+                if paused {
+                    self.paused.insert(output.to_string());
+                } else {
+                    self.paused.remove(output);
+                }
+                Ok(())
+            }
+            other => {
+                tracing::warn!(output = %output, reply = ?other, "plasma did not take the pause");
+                Err(SurfaceError::UnknownOutput)
+            }
+        }
+    }
+
     fn clear(&mut self, output: &str) -> Result<(), SurfaceError> {
         self.videos.remove(output);
+        self.paused.remove(output);
         let restore = self
             .previous
             .get(output)

@@ -26,6 +26,8 @@ Herramienta de consola para hablar con el daemon. Se entrega con la app, para di
 | `outputs` | Monitores (nombre, tamaño, escala) y lo que muestra cada uno |
 | `set <carpeta> [--monitor <nombre>] [--mode <modo>]` | Pone un fondo. Sin `--monitor`, el mismo en todos (y se olvida lo que tenía cada monitor). Modos: `fill` (rellenar, por defecto, recorta), `fit` (ajustar, con bordes), `stretch` (estirar), `center` (centrar, tamaño real) |
 | `clear [--monitor <nombre>]` | Quita el fondo. Con `--monitor`, ese monitor queda sin fondo aunque haya uno para todos |
+| `pause [--monitor <nombre>]` | Pausa el video de fondo (queda el último cuadro en pantalla) hasta `resume` o hasta reiniciar el daemon. Las imágenes no cambian. `outputs` muestra `en pausa: a mano` |
+| `resume [--monitor <nombre>]` | Vuelve a reproducir lo que pausó `pause`. Reanudar un monitor cuando estaban todos en pausa deja en pausa a los demás |
 | `ping` | Comprueba que el daemon responde |
 | `shutdown` | Apaga el daemon |
 
@@ -40,6 +42,8 @@ Donde todavía no se puede mostrar el fondo (X11 y GNOME), `set` guarda igual lo
 En KDE Plasma el daemon instala su complemento de fondo en `~/.local/share/plasma/wallpapers/` y cambia cada pantalla a ese tipo de fondo; `clear` le devuelve a la pantalla el tipo de fondo que tenía antes. La primera vez, Plasma puede necesitar reiniciarse (cerrar sesión y volver a entrar) para ver el complemento: `status` lo avisa. Los videos los reproduce Plasma dentro del complemento (Qt Multimedia), con los decodificadores que instala tu distribución. Al cambiar de video, el anterior sigue en pantalla hasta que el nuevo tiene su primer cuadro. El complemento le dice al daemon si el video de verdad se ve, y `outputs` lo explica cuando no: `video_no_decoder` (Plasma no tiene decodificador para ese formato, por ejemplo HEVC en algunas distribuciones; la pantalla muestra el color grafito), `video_no_frames` (el video se abrió pero en 10 segundos no llegó ni un cuadro a la pantalla; color grafito) y `video_too_slow` (llega menos del 80 % de los cuadros y menos de 24 por segundo, así que se ve a saltos; pasa mucho en máquinas virtuales). Ninguno es un error de la app: un video de menor resolución (por ejemplo 720p) o WebM suele funcionar.
 
 En Windows el daemon pone una ventana por monitor detrás de los íconos del escritorio; los clics llegan a los íconos y al escritorio como siempre. Windows tiene dos formas del escritorio y el daemon detecta cuál hay: `status` muestra `windows_raised` (Windows 11 24H2 en adelante) o `windows_classic` (Windows 10 y Windows 11 hasta 23H2). Los videos los dibuja libmpv (`libmpv-2.dll`, junto al daemon) con Direct3D 11; sin ella, un video muestra el color de respaldo y `outputs` dice por qué. Si el Explorador se reinicia, el fondo vuelve solo, también los videos. Si el fondo no se ve, la variable `MIRAISHIN_WORKERW` cambia lo que el daemon le pide al Explorador que prepare: `auto` (por defecto), `none`, o dos números como `0,0` o `0xD,1`; es una ayuda de diagnóstico mientras se prueba la versión de Windows.
+
+Un video en pausa deja de decodificarse: en Sway y Hyprland se pausa mpv (si dos monitores comparten el mismo video y solo uno está en pausa, mpv sigue para el otro y el que está en pausa deja de dibujar); en KDE Plasma el complemento pausa su reproductor. `outputs` dice por qué está en pausa cada monitor. Windows todavía no puede pausar: `pause` lo avisa y el video sigue (no es un error).
 
 Con `--json` muestra la respuesta del daemon tal cual. Códigos de salida: `0` bien, `1` error, `2` el daemon no está corriendo (no es una falla). Los textos salen en el idioma de los ajustes o, si es `system`, en el de `LANG`.
 
@@ -64,7 +68,14 @@ wallpapers_dir = "/home/ana/Fondos"  # opcional; por defecto, la carpeta de arri
 language = "system"                   # system, es, en
 log_level = "info"                    # error, warn, info, debug, trace
 video_saver = "auto"                  # auto, on, off (ver «Copias compatibles»)
+pause_on_fullscreen = true            # pausa el video con una app en pantalla completa en ese monitor
+pause_on_maximized = false            # … con una ventana maximizada en ese monitor
+pause_on_battery = true               # … con el equipo funcionando con batería
+pause_on_lock = true                  # … con la sesión bloqueada
+pause_on_screen_off = true            # … con la pantalla de ese monitor apagada
 ```
+
+Las claves `pause_on_*` ya se leen, pero cada una actúa recién cuando llega su señal (fase 3: batería, pantalla completa, bloqueo y pantalla apagada llegan en los pasos siguientes).
 
 Todas las claves son opcionales. Un valor no válido usa su valor por defecto y se anota en el log. Las claves que esta versión no conoce se conservan al guardar. `RUST_LOG` pisa `log_level` para depurar.
 
