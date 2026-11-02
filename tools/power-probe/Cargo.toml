@@ -1,0 +1,15 @@
+[package]
+name = "miraishin-power-probe"
+description = "Prueba mínima (fase 3.0): en Sway/Hyprland, qué ventana está en pantalla completa y en qué monitor (wlr-foreign-toplevel) y cuándo se apaga un monitor (wlr-output-power-management). No se distribuye"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "miraishin-power-probe"
+path = "src/main.rs"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+smithay-client-toolkit = { version = "0.21", default-features = false }

@@ -16,6 +16,7 @@ members = [
     "apps/ctl",
     "tools/layer-probe",
     "tools/win-video-probe",
+    "tools/power-probe",
     "services/web",
 ]
 

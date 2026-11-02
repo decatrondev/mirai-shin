@@ -1507,6 +1507,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "miraishin-power-probe"
+version = "0.1.0"
+dependencies = [
+ "smithay-client-toolkit",
+]
+
+[[package]]
 name = "miraishin-render-image"
 version = "0.1.0"
 dependencies = [
