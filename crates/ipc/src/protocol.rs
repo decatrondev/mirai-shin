@@ -149,6 +149,10 @@ pub struct StatusResult {
     /// Tipo de sesión (`wayland`, `x11`), vacío si no se sabe.
     #[serde(default)]
     pub session: String,
+    /// Energía del equipo (fase 3.2): `ac`, `battery` o `unavailable` (sin UPower o sin
+    /// permiso). Vacío con un daemon anterior.
+    #[serde(default)]
+    pub power: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

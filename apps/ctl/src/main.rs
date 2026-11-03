@@ -233,6 +233,16 @@ fn print_human(lang: Language, method: &str, value: Value) {
                 println!("{}", fill(t(lang, "status_desktop"), &[desktop, session]));
             }
             print_surface(lang, &s.surface, s.surface_available);
+            // Vacío con un daemon anterior a la fase 3.2: no se muestra.
+            let power = match s.power.as_str() {
+                "" => None,
+                "ac" => Some("status_power_ac"),
+                "battery" => Some("status_power_battery"),
+                _ => Some("status_power_unavailable"),
+            };
+            if let Some(key) = power {
+                println!("{}", t(lang, key));
+            }
         }
         methods::OUTPUTS_LIST => print_outputs(lang, value),
         methods::WALLPAPER_SET | methods::WALLPAPER_CLEAR => {

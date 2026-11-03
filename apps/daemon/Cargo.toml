@@ -28,6 +28,9 @@ anyhow = { workspace = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 miraishin-surface-wayland = { workspace = true }
 miraishin-surface-plasma = { workspace = true }
+# UPower (batería, fase 3.2; también el UPower falso de las pruebas). Mismas funciones que
+# en surface-plasma: una sola copia.
+zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }
 
 [target.'cfg(windows)'.dependencies]
 miraishin-surface-windows = { workspace = true }

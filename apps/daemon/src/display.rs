@@ -44,6 +44,8 @@ enum Msg {
     CopyDone(PathBuf, Result<(), &'static str>),
     /// Pausa a mano (`true`) o la quita, de un monitor o de todos (fase 3).
     Pause(Option<String>, bool, oneshot::Sender<()>),
+    /// El equipo pasó a batería (`true`) o al cargador (fase 3.2).
+    OnBattery(bool),
     Stop,
 }
 
@@ -185,6 +187,11 @@ impl Display {
         }
     }
 
+    /// Con batería o con cargador (lo avisa `power`). No espera.
+    pub fn set_on_battery(&self, on_battery: bool) {
+        let _ = self.tx.send(Msg::OnBattery(on_battery));
+    }
+
     pub fn stop(&self) {
         let _ = self.tx.send(Msg::Stop);
     }
@@ -324,6 +331,14 @@ impl Worker {
                         self.send_outputs();
                     }
                     let _ = reply.send(());
+                }
+                Msg::OnBattery(on) => {
+                    if self.system.on_battery != on {
+                        self.system.on_battery = on;
+                        if self.update_pause() {
+                            self.send_outputs();
+                        }
+                    }
                 }
                 Msg::Stop => break,
             }

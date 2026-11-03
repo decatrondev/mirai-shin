@@ -201,6 +201,16 @@ fn start_with(
     screen: &Shared,
     env: miraishin_daemon::VideoEnv,
 ) -> tokio::task::JoinHandle<()> {
+    start_full(paths, ep, screen, env, miraishin_daemon::power::none())
+}
+
+fn start_full(
+    paths: &Paths,
+    ep: &Endpoint,
+    screen: &Shared,
+    env: miraishin_daemon::VideoEnv,
+    power: miraishin_daemon::power::PowerFactory,
+) -> tokio::task::JoinHandle<()> {
     let config = RunConfig {
         paths: paths.clone(),
         endpoint: ep.clone(),
@@ -208,6 +218,7 @@ fn start_with(
         console_logs: false,
         surface: Some(factory(screen.clone())),
         video_env: Some(env),
+        power: Some(power),
     };
     tokio::spawn(async move {
         run(config).await.unwrap();
@@ -365,6 +376,7 @@ async fn sin_superficie_se_guarda_igual() {
         console_logs: false,
         surface: Some(Box::new(|_| Err("kde_plugin_needs_restart".into()))),
         video_env: Some(test_video_env()),
+        power: Some(miraishin_daemon::power::none()),
     };
     let task = tokio::spawn(async move { run(config).await.unwrap() });
     let mut c = connect(&ep).await;
@@ -819,5 +831,76 @@ async fn superficie_que_no_sabe_pausar() {
     assert_eq!(r["items"][0]["pause_unsupported"], json!(true));
     let r = c.call(methods::PLAYBACK_RESUME, Value::Null).await.unwrap();
     assert_eq!(r["items"][0]["pause_unsupported"], json!(false));
+    stop(c, task).await;
+}
+
+#[tokio::test]
+async fn pausa_con_bateria() {
+    use miraishin_daemon::power::{PowerSink, PowerState};
+    let t = tempfile::tempdir().unwrap();
+    let paths = Paths::under(t.path());
+    let ep = endpoint(t.path());
+    let wall = paths.default_wallpapers_dir();
+    video_wallpaper(&wall, "olas");
+    image_wallpaper(&wall, "rojo", RED);
+    let screen: Shared = Arc::new(Mutex::new(Screen {
+        outputs: vec![out("DP-1", 100, 50, 120), out("eDP-1", 40, 40, 120)],
+        plays_video: true,
+        pauses: true,
+        ..Screen::default()
+    }));
+    // Batería falsa: se guarda a quién avisar y se le mandan estados a mano.
+    let power: Arc<Mutex<Option<PowerSink>>> = Arc::default();
+    let keep = power.clone();
+    let task = start_full(
+        &paths,
+        &ep,
+        &screen,
+        test_video_env(),
+        Box::new(move |sink| *keep.lock().unwrap() = Some(sink)),
+    );
+    let mut c = connect(&ep).await;
+    let send = |s: PowerState| (power.lock().unwrap().as_ref().unwrap())(s);
+    let status = c.call(methods::STATUS, Value::Null).await.unwrap();
+    assert_eq!(status["power"], json!("unavailable"));
+
+    c.call(methods::WALLPAPER_SET, json!({"folder": "olas"}))
+        .await
+        .unwrap();
+    c.call(
+        methods::WALLPAPER_SET,
+        json!({"folder": "rojo", "output": "eDP-1"}),
+    )
+    .await
+    .unwrap();
+    send(PowerState::Ac);
+    let status = c.call(methods::STATUS, Value::Null).await.unwrap();
+    assert_eq!(status["power"], json!("ac"));
+    assert!(screen.lock().unwrap().paused.is_empty());
+
+    // Se desenchufa: se pausa el video (la imagen no tiene nada que pausar).
+    send(PowerState::Battery);
+    wait_for(|| screen.lock().unwrap().paused.contains("DP-1")).await;
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(paused(&list, "DP-1"), json!("battery"));
+    assert_eq!(paused(&list, "eDP-1"), Value::Null);
+    let status = c.call(methods::STATUS, Value::Null).await.unwrap();
+    assert_eq!(status["power"], json!("battery"));
+
+    // Con batería y a mano: manda la pausa a mano; al enchufar sigue en pausa.
+    let r = c.call(methods::PLAYBACK_PAUSE, Value::Null).await.unwrap();
+    assert_eq!(paused(&r, "DP-1"), json!("manual"));
+    send(PowerState::Ac);
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(paused(&list, "DP-1"), json!("manual"));
+    assert!(screen.lock().unwrap().paused.contains("DP-1"));
+    c.call(methods::PLAYBACK_RESUME, Value::Null).await.unwrap();
+    assert!(screen.lock().unwrap().paused.is_empty());
+
+    // Sin UPower (se cortó) no se pausa por batería.
+    send(PowerState::Battery);
+    wait_for(|| screen.lock().unwrap().paused.contains("DP-1")).await;
+    send(PowerState::Unavailable);
+    wait_for(|| screen.lock().unwrap().paused.is_empty()).await;
     stop(c, task).await;
 }

@@ -27,6 +27,7 @@ fn main() -> ExitCode {
         console_logs: true,
         surface: None,
         video_env: None,
+        power: None,
     };
     match runtime.block_on(run(config)) {
         Ok(()) => ExitCode::SUCCESS,

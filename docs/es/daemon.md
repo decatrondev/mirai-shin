@@ -20,7 +20,7 @@ Herramienta de consola para hablar con el daemon. Se entrega con la app, para di
 
 | Comando | Qué hace |
 |---|---|
-| `status` | Versión del daemon, tiempo encendido, carpeta de fondos, cuántos fondos son válidos o tienen problemas, licencia, y si este escritorio puede mostrar el fondo (y si no, por qué) |
+| `status` | Versión del daemon, tiempo encendido, carpeta de fondos, cuántos fondos son válidos o tienen problemas, licencia, si este escritorio puede mostrar el fondo (y si no, por qué), y si el equipo está con cargador o con batería |
 | `list` | Todos los fondos de la biblioteca; los que tienen problemas muestran sus [códigos](wallpaper-format.md#problemas) |
 | `rescan` | Vuelve a leer la carpeta de fondos (un fondo en pantalla que cambió se vuelve a dibujar) |
 | `outputs` | Monitores (nombre, tamaño, escala) y lo que muestra cada uno |
@@ -75,7 +75,7 @@ pause_on_lock = true                  # … con la sesión bloqueada
 pause_on_screen_off = true            # … con la pantalla de ese monitor apagada
 ```
 
-Las claves `pause_on_*` ya se leen, pero cada una actúa recién cuando llega su señal (fase 3: batería, pantalla completa, bloqueo y pantalla apagada llegan en los pasos siguientes).
+Las claves `pause_on_*` ya se leen, pero cada una actúa recién cuando llega su señal. **La batería** ya funciona en Linux: el daemon le pregunta a UPower (el Flatpak tiene permiso para hablarle) y pausa los videos apenas se desenchufa el cargador; al volver a enchufarlo, siguen. `outputs` muestra «en pausa: con batería». Una pausa hecha con `pause` manda: enchufar no la quita. Si el sistema no tiene UPower, `status` dice que no se sabe la energía y los videos no se pausan por batería. Pantalla completa, bloqueo y pantalla apagada llegan en los pasos siguientes de la fase 3; en Windows, la batería llega con ellos.
 
 Todas las claves son opcionales. Un valor no válido usa su valor por defecto y se anota en el log. Las claves que esta versión no conoce se conservan al guardar. `RUST_LOG` pisa `log_level` para depurar.
 

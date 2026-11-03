@@ -20,7 +20,7 @@ A console tool to talk to the daemon, shipped with the app for diagnostics and s
 
 | Command | What it does |
 |---|---|
-| `status` | Daemon version, uptime, wallpapers folder, how many wallpapers are valid or have problems, license, and whether this desktop can show the wallpaper (and why not) |
+| `status` | Daemon version, uptime, wallpapers folder, how many wallpapers are valid or have problems, license, whether this desktop can show the wallpaper (and why not), and whether the computer is plugged in or on battery |
 | `list` | Every wallpaper in the library; the ones with problems show their [codes](wallpaper-format.md#problems) |
 | `rescan` | Reads the wallpapers folder again (a wallpaper on screen that changed is drawn again) |
 | `outputs` | Monitors (name, size, scale) and what each one shows |
@@ -75,7 +75,7 @@ pause_on_lock = true                      # … when the session is locked
 pause_on_screen_off = true                # … when that monitor's screen is off
 ```
 
-The `pause_on_*` keys are read now but act only as each signal arrives (phase 3: battery, full screen, lock and screen off come in the next steps).
+The `pause_on_*` keys are read now but act only as each signal arrives. **Battery** works on Linux: the daemon asks UPower (the Flatpak has permission to talk to it) and pauses the videos as soon as the charger is unplugged, and plays them again when it is plugged back in; `outputs` shows `paused: on battery`. A pause made with `pause` wins: plugging in does not undo it. If the system has no UPower, `status` says the power source is unknown and videos are not paused on battery. Full screen, lock and screen off come in the next steps of phase 3; on Windows, battery comes with them.
 
 Every key is optional. An invalid value uses its default and is noted in the log. Keys this version does not know are kept when the settings are saved. `RUST_LOG` overrides `log_level` for debugging.
 

@@ -2,6 +2,7 @@
 
 pub mod copies;
 pub mod display;
+pub mod power;
 
 use chrono::Utc;
 use display::{Display, SurfaceFactory};
@@ -14,6 +15,7 @@ use miraishin_ipc::{
 use miraishin_license::LicenseProvider;
 use miraishin_store::library::StoreError;
 use miraishin_store::{paths::redact, Library, Paths, Settings, ALL_OUTPUTS};
+use power::PowerState;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -48,6 +50,9 @@ pub struct RunConfig {
     /// Para pruebas: GPU, `ffmpeg` y tiempos de las copias de video. `None` = los de este
     /// equipo (`copies::no_real_gpu`, `copies::find_ffmpeg`).
     pub video_env: Option<VideoEnv>,
+    /// De dónde se sabe si el equipo está con batería. `None` = la de este equipo
+    /// (`power::system`, UPower en Linux).
+    pub power: Option<power::PowerFactory>,
 }
 
 /// Lo que en un equipo real se detecta solo (ver `RunConfig::video_env`).
@@ -168,9 +173,25 @@ pub async fn run(config: RunConfig) -> Result<(), RunError> {
         available = surface_ok,
         "wallpaper surface"
     );
+    let power = Arc::new(Mutex::new(PowerState::Unavailable));
+    {
+        let state = power.clone();
+        let display = screen.clone();
+        let sink: power::PowerSink = Arc::new(move |new: PowerState| {
+            let mut now = state.lock().unwrap_or_else(|p| p.into_inner());
+            if *now == new {
+                return;
+            }
+            *now = new;
+            tracing::info!(power = new.as_str(), "power source");
+            display.set_on_battery(new == PowerState::Battery);
+        });
+        config.power.unwrap_or_else(power::system)(sink);
+    }
     let daemon = Arc::new(Daemon {
         library,
         display: screen.clone(),
+        power,
         wallpapers_dir,
         started: Instant::now(),
         license: Box::new(miraishin_license::NotRequired),
@@ -222,6 +243,7 @@ async fn termination() {
 struct Daemon {
     library: Arc<Mutex<Library>>,
     display: Display,
+    power: Arc<Mutex<PowerState>>,
     wallpapers_dir: PathBuf,
     started: Instant,
     license: Box<dyn LicenseProvider>,
@@ -275,6 +297,12 @@ impl Daemon {
             surface_available: self.display.surface().1,
             desktop: desktop_name(),
             session: env_text("XDG_SESSION_TYPE"),
+            power: self
+                .power
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .as_str()
+                .to_string(),
         })
     }
 
