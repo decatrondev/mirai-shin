@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use image::codecs::png::{CompressionType, FilterType, PngEncoder};
 use image::{ExtendedColorType, ImageEncoder};
 use miraishin_core::fit::FitMode;
+use miraishin_core::pause::{PauseReason, PauseSettings};
 use miraishin_core::surface::{check_frame, EventSink, Frame, OutputInfo, Surface, SurfaceError};
 use miraishin_surface_wayland::OutputWatcher;
 use zbus::blocking::Connection;
@@ -28,6 +29,8 @@ pub struct PlasmaSurface {
     videos: HashSet<String>,
     /// Monitores con el video en pausa (fase 3).
     paused: HashSet<String>,
+    /// Valor de `PauseWhen` (fase 3.3): el complemento pausa solo con esas ventanas encima.
+    pause_when: String,
     counter: u64,
 }
 
@@ -62,6 +65,7 @@ impl PlasmaSurface {
             current: HashMap::new(),
             videos: HashSet::new(),
             paused: HashSet::new(),
+            pause_when: script::pause_when(true, false),
             counter: 0,
         };
         surface.forget_old_frames();
@@ -169,6 +173,7 @@ impl Surface for PlasmaSurface {
             &script::file_url(video),
             mode.as_str(),
             self.paused.contains(output),
+            &self.pause_when,
         );
         self.put(output, &entries)?;
         self.videos.insert(output.to_string());
@@ -217,6 +222,23 @@ impl Surface for PlasmaSurface {
                 tracing::warn!(output = %output, reply = ?other, "plasma did not take the pause");
                 Err(SurfaceError::UnknownOutput)
             }
+        }
+    }
+
+    fn set_window_rules(&mut self, settings: &PauseSettings) {
+        self.pause_when = script::pause_when(settings.on_fullscreen, settings.on_maximized);
+    }
+
+    /// Lo decide el complemento (Windows.qml) y lo deja en `Covered`.
+    fn window_pause(&self, output: &str) -> Option<PauseReason> {
+        let reply = eval(
+            &self.dbus,
+            &script::read_covered(output, package::plugin_id()),
+        )
+        .ok()?;
+        match script::parse_covered(&reply)? {
+            "fullscreen" => Some(PauseReason::Fullscreen),
+            _ => Some(PauseReason::Maximized),
         }
     }
 

@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use khronos_egl as egl_api;
 use miraishin_core::fit::FitMode;
+use miraishin_core::pause::{self, Cover, Window};
 use miraishin_core::surface::{
     check_frame, EventSink, Frame, OutputInfo, Size, Surface, SurfaceError, SurfaceEvent,
 };
@@ -26,11 +27,16 @@ use smithay_client_toolkit::{
         },
         calloop_wayland_source::WaylandSource,
         client::{
+            backend::ObjectId,
             globals::registry_queue_init,
             protocol::{wl_output, wl_shm, wl_surface},
             Connection, Proxy, QueueHandle,
         },
         protocols::wp::viewporter::client::{wp_viewport, wp_viewporter},
+        protocols_wlr::foreign_toplevel::v1::client::{
+            zwlr_foreign_toplevel_handle_v1 as toplevel,
+            zwlr_foreign_toplevel_manager_v1 as toplevels,
+        },
     },
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
@@ -319,7 +325,24 @@ struct State {
     players: HashMap<VideoKey, Slot>,
     /// libmpv avisa por aquí (desde sus hilos) que hay eventos o un cuadro nuevo.
     ping: Ping,
+    // ---- Ventanas (fase 3.3, `wlr-foreign-toplevel`; Sway y Hyprland)
+    /// Se guarda para que el compositor siga avisando. `None` si no lo ofrece.
+    _toplevels: Option<toplevels::ZwlrForeignToplevelManagerV1>,
+    windows: HashMap<ObjectId, ToplevelInfo>,
+    /// Lo último avisado de cada monitor tapado (sin entrada = no tapado).
+    covered: HashMap<String, Cover>,
 }
+
+/// Una ventana según `wlr-foreign-toplevel` (se junta hasta su `done`).
+#[derive(Default)]
+struct ToplevelInfo {
+    outputs: Vec<wl_output::WlOutput>,
+    states: Vec<u32>,
+}
+
+/// Datos de los objetos de `wlr-foreign-toplevel`.
+struct ToplevelManagerData;
+struct ToplevelData;
 
 fn run(
     commands: smithay_client_toolkit::reexports::calloop::channel::Channel<Command>,
@@ -359,6 +382,21 @@ fn run(
     let viewporter = globals
         .bind::<wp_viewporter::WpViewporter, _, _>(&qh, 1..=1, NoEvents)
         .ok();
+    // Ventanas en pantalla completa (fase 3.3). Solo con fondos: `OutputWatcher` (KDE) no lo
+    // usa, y KWin tampoco lo ofrece.
+    let toplevel_manager = if backgrounds {
+        globals
+            .bind::<toplevels::ZwlrForeignToplevelManagerV1, _, _>(&qh, 1..=3, ToplevelManagerData)
+            .ok()
+    } else {
+        None
+    };
+    if backgrounds {
+        tracing::info!(
+            available = toplevel_manager.is_some(),
+            "window list (wlr-foreign-toplevel)"
+        );
+    }
 
     let mut state = State {
         registry: RegistryState::new(&globals),
@@ -378,6 +416,9 @@ fn run(
         egl: None,
         players: HashMap::new(),
         ping,
+        _toplevels: toplevel_manager,
+        windows: HashMap::new(),
+        covered: HashMap::new(),
     };
 
     // Dos idas y vueltas: la primera trae los monitores, la segunda sus datos completos.
@@ -419,6 +460,8 @@ fn run(
     state.ready = true;
     state.publish();
     let _ = ready.send(Ok(()));
+    // Lo que ya estaba tapado al arrancar (los avisos anteriores no se mandaron).
+    state.update_covered();
 
     while !state.exit {
         if event_loop.dispatch(None, &mut state).is_err() {
@@ -946,9 +989,11 @@ impl OutputHandler for State {
             self.release_video(v);
         }
         self.publish();
+        self.covered.remove(&gone.info.name);
         self.emit(SurfaceEvent::OutputRemoved {
             name: gone.info.name,
         });
+        self.update_covered();
     }
 }
 
@@ -1118,6 +1163,122 @@ impl Dispatch2<wp_viewport::WpViewport, State> for NoEvents {
         _: &Connection,
         _: &QueueHandle<State>,
     ) {
+    }
+}
+
+impl State {
+    /// Vuelve a calcular qué monitores tienen el fondo tapado y avisa los que cambiaron.
+    fn update_covered(&mut self) {
+        if !self.ready {
+            return;
+        }
+        let has = |t: &ToplevelInfo, s: toplevel::State| t.states.contains(&(s as u32));
+        let windows: Vec<Window> = self
+            .windows
+            .values()
+            .map(|t| Window {
+                outputs: t
+                    .outputs
+                    .iter()
+                    .filter_map(|wl| self.outputs.iter().find(|o| &o.wl == wl))
+                    .map(|o| o.info.name.clone())
+                    .collect(),
+                fullscreen: has(t, toplevel::State::Fullscreen),
+                maximized: has(t, toplevel::State::Maximized),
+                minimized: has(t, toplevel::State::Minimized),
+                activated: has(t, toplevel::State::Activated),
+            })
+            .collect();
+        let now = pause::covered(&windows);
+        let mut names: Vec<String> = self.outputs.iter().map(|o| o.info.name.clone()).collect();
+        names.extend(self.covered.keys().cloned());
+        names.sort();
+        names.dedup();
+        for name in names {
+            let new = now.get(&name).copied().unwrap_or_default();
+            let old = self.covered.get(&name).copied().unwrap_or_default();
+            if new == old {
+                continue;
+            }
+            if new == Cover::default() {
+                self.covered.remove(&name);
+            } else {
+                self.covered.insert(name.clone(), new);
+            }
+            if self.outputs.iter().any(|o| o.info.name == name) {
+                self.emit(SurfaceEvent::Covered {
+                    output: name,
+                    fullscreen: new.fullscreen,
+                    maximized: new.maximized,
+                });
+            }
+        }
+    }
+}
+
+impl Dispatch2<toplevels::ZwlrForeignToplevelManagerV1, State> for ToplevelManagerData {
+    fn event(
+        &self,
+        _: &mut State,
+        _: &toplevels::ZwlrForeignToplevelManagerV1,
+        _: toplevels::Event,
+        _: &Connection,
+        _: &QueueHandle<State>,
+    ) {
+        // `toplevel` crea el objeto de la ventana (abajo); `finished`: no llegan más.
+    }
+
+    fn event_created_child(
+        opcode: u16,
+        qh: &QueueHandle<State>,
+    ) -> Arc<dyn smithay_client_toolkit::reexports::client::backend::ObjectData> {
+        match opcode {
+            toplevels::EVT_TOPLEVEL_OPCODE => {
+                qh.make_data::<toplevel::ZwlrForeignToplevelHandleV1, _>(ToplevelData)
+            }
+            _ => panic!("wlr-foreign-toplevel: unexpected child object (opcode {opcode})"),
+        }
+    }
+}
+
+impl Dispatch2<toplevel::ZwlrForeignToplevelHandleV1, State> for ToplevelData {
+    fn event(
+        &self,
+        state: &mut State,
+        handle: &toplevel::ZwlrForeignToplevelHandleV1,
+        event: toplevel::Event,
+        _: &Connection,
+        _: &QueueHandle<State>,
+    ) {
+        let id = handle.id();
+        match event {
+            toplevel::Event::State { state: bytes } => {
+                state.windows.entry(id).or_default().states = bytes
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|c| u32::from_ne_bytes(*c))
+                    .collect();
+            }
+            toplevel::Event::OutputEnter { output } => {
+                state.windows.entry(id).or_default().outputs.push(output);
+            }
+            toplevel::Event::OutputLeave { output } => {
+                state
+                    .windows
+                    .entry(id)
+                    .or_default()
+                    .outputs
+                    .retain(|o| o != &output);
+            }
+            toplevel::Event::Done => state.update_covered(),
+            toplevel::Event::Closed => {
+                state.windows.remove(&id);
+                handle.destroy();
+                state.update_covered();
+            }
+            _ => {}
+        }
     }
 }
 

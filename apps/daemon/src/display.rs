@@ -256,6 +256,9 @@ struct Worker {
 
 impl Worker {
     fn run(mut self, rx: mpsc::Receiver<Msg>) {
+        if let Some(s) = self.surface.as_mut() {
+            s.set_window_rules(&self.pause_settings);
+        }
         loop {
             let next = self.checks.iter().map(|c| c.0).min();
             let msg = match next {
@@ -283,10 +286,26 @@ impl Worker {
                         let _ = d.send(());
                     }
                 }
+                Msg::Surface(SurfaceEvent::Covered {
+                    output,
+                    fullscreen,
+                    maximized,
+                }) => {
+                    let s = self.signals.entry(output.clone()).or_default();
+                    if (s.fullscreen, s.maximized) != (fullscreen, maximized) {
+                        s.fullscreen = fullscreen;
+                        s.maximized = maximized;
+                        tracing::debug!(output = %output, fullscreen, maximized, "windows over the wallpaper");
+                        if self.update_pause() {
+                            self.send_outputs();
+                        }
+                    }
+                }
                 Msg::Surface(e) => {
                     if let SurfaceEvent::OutputRemoved { name } = &e {
                         self.shown.remove(name);
                         self.videos.remove(name);
+                        self.signals.remove(name);
                         tracing::info!(output = %name, "monitor removed");
                     } else {
                         tracing::info!(event = ?e, "monitor changed");
@@ -755,6 +774,13 @@ impl Worker {
                             .get(&o.name)
                             .copied()
                             .flatten()
+                            .or_else(|| {
+                                // KDE: el complemento pausa solo con una ventana encima.
+                                self.videos
+                                    .contains(&o.name)
+                                    .then(|| self.surface.as_ref()?.window_pause(&o.name))
+                                    .flatten()
+                            })
                             .map(|r| r.as_str().to_string()),
                         pause_unsupported: self.pause_unsupported.contains(&o.name),
                     }

@@ -25,6 +25,14 @@
     <entry name="Paused" type="String">
       <default></default>
     </entry>
+    <!-- PauseWhen: con qué ventanas encima se pausa solo ("fullscreen", "maximized", las dos o vacío; fase 3.3). -->
+    <entry name="PauseWhen" type="String">
+      <default></default>
+    </entry>
+    <!-- Covered: lo escribe el complemento: por qué ventana está en pausa ("fullscreen", "maximized" o vacío). -->
+    <entry name="Covered" type="String">
+      <default></default>
+    </entry>
     <!-- Fps: cuadros por segundo que llegan a la pantalla / los del video (p. ej. 29.8/30.0). -->
     <entry name="Fps" type="String">
       <default></default>

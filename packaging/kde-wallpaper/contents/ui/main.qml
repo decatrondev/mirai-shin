@@ -6,12 +6,16 @@
 //   el MediaPlayer de QtMultimedia. `Mode` = fill, fit, stretch o center.
 // - `Paused`: "true" = el video queda en pausa en su último cuadro (fase 3). Un video nuevo
 //   en pausa se detiene en cuanto muestra su primer cuadro.
+// - `PauseWhen`: con qué ventanas encima se pausa solo, sin esperar al daemon (fase 3.3):
+//   "fullscreen", "maximized", las dos separadas por espacio, o vacío. Las ventanas las mira
+//   Windows.qml.
 // Y deja escrito para el daemon (lo lee por D-Bus):
 // - `Status`: estado del video: "" (sin video), `loading`, `playing`, o el código del problema
 //   (`video_no_decoder`, `video_unreadable`, `video_unplayable`, `video_no_frames`,
 //   `video_too_slow`).
 // - `Fps`: cuadros por segundo que de verdad llegan a la pantalla, y los que trae el video
 //   (se guarda solo cuando cambia bastante: cada escritura va al disco).
+// - `Covered`: por qué ventana está en pausa solo: "fullscreen", "maximized" o vacío.
 import QtQuick
 import QtQuick.Window
 import QtMultimedia
@@ -23,7 +27,31 @@ WallpaperItem {
     readonly property string wantedImage: root.configuration.Image || ""
     readonly property string wantedVideo: root.configuration.Video || ""
     readonly property string mode: root.configuration.Mode || "fill"
-    readonly property bool paused: root.configuration.Paused === "true"
+    readonly property var pauseWhen: (root.configuration.PauseWhen || "").split(" ")
+
+    // ---- Ventanas encima (fase 3.3) ----
+    readonly property rect screenRect: Qt.rect(Screen.virtualX, Screen.virtualY, Screen.width, Screen.height)
+    Loader {
+        id: windowsLoader
+        source: "Windows.qml"
+        onLoaded: item.screenGeometry = Qt.binding(() => root.screenRect)
+        onStatusChanged: if (status === Loader.Error)
+            console.warn("Mirai Shin: the window list is not available; no pause for full screen")
+    }
+    readonly property string covered: {
+        const w = windowsLoader.item;
+        if (!w || root.wantedVideo === "")
+            return "";
+        if (w.fullScreen && root.pauseWhen.indexOf("fullscreen") >= 0)
+            return "fullscreen";
+        if (w.maximized && root.pauseWhen.indexOf("maximized") >= 0)
+            return "maximized";
+        return "";
+    }
+    onCoveredChanged: save("Covered", covered)
+
+    // En pausa por el daemon (a mano, batería…) o por una ventana encima.
+    readonly property bool paused: root.configuration.Paused === "true" || covered !== ""
 
     onPausedChanged: {
         for (let i = 0; i < slots.count; i++)
@@ -60,7 +88,10 @@ WallpaperItem {
     }
 
     onWantedImageChanged: loadImage(wantedImage)
-    Component.onCompleted: loadImage(wantedImage)
+    Component.onCompleted: {
+        loadImage(wantedImage);
+        save("Covered", covered); // por si quedó algo de antes de reiniciar Plasma
+    }
 
     Image {
         id: a

@@ -96,6 +96,13 @@ fn main() {
                     )
                 );
             }
+            Ok(SurfaceEvent::Covered {
+                output,
+                fullscreen,
+                maximized,
+            }) => println!(
+                "evento: tapado {output} pantalla_completa={fullscreen} maximizada={maximized}"
+            ),
             Err(_) => break,
         }
     }

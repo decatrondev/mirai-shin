@@ -27,6 +27,9 @@ struct Screen {
     /// Sabe pausar (fase 3) y monitores con el video en pausa.
     pauses: bool,
     paused: HashSet<String>,
+    /// Lo que la superficie pausa sola (KDE, fase 3.3) y los ajustes que recibió.
+    window_pauses: HashMap<String, miraishin_core::pause::PauseReason>,
+    window_rules: Option<miraishin_core::pause::PauseSettings>,
     sink: Option<EventSink>,
 }
 
@@ -85,6 +88,12 @@ impl Surface for FakeSurface {
             s.paused.remove(output);
         }
         Ok(())
+    }
+    fn set_window_rules(&mut self, settings: &miraishin_core::pause::PauseSettings) {
+        self.0.lock().unwrap().window_rules = Some(*settings);
+    }
+    fn window_pause(&self, output: &str) -> Option<miraishin_core::pause::PauseReason> {
+        self.0.lock().unwrap().window_pauses.get(output).copied()
     }
     fn clear(&mut self, output: &str) -> Result<(), SurfaceError> {
         let mut s = self.0.lock().unwrap();
@@ -902,5 +911,76 @@ async fn pausa_con_bateria() {
     wait_for(|| screen.lock().unwrap().paused.contains("DP-1")).await;
     send(PowerState::Unavailable);
     wait_for(|| screen.lock().unwrap().paused.is_empty()).await;
+    stop(c, task).await;
+}
+
+#[tokio::test]
+async fn pausa_por_ventanas() {
+    use miraishin_core::pause::{PauseReason, PauseSettings};
+    let t = tempfile::tempdir().unwrap();
+    let paths = Paths::under(t.path());
+    let ep = endpoint(t.path());
+    video_wallpaper(&paths.default_wallpapers_dir(), "olas");
+    let screen: Shared = Arc::new(Mutex::new(Screen {
+        outputs: vec![out("DP-1", 100, 50, 120), out("HDMI-A-1", 40, 40, 120)],
+        plays_video: true,
+        pauses: true,
+        ..Screen::default()
+    }));
+    let task = start(&paths, &ep, &screen);
+    let mut c = connect(&ep).await;
+    c.call(methods::WALLPAPER_SET, json!({"folder": "olas"}))
+        .await
+        .unwrap();
+    // La superficie recibe los ajustes (KDE los usa para pausar sola).
+    assert_eq!(
+        screen.lock().unwrap().window_rules,
+        Some(PauseSettings::default())
+    );
+    let covered = |output: &str, fullscreen: bool, maximized: bool| {
+        let mut s = screen.lock().unwrap();
+        (s.sink.as_mut().unwrap())(SurfaceEvent::Covered {
+            output: output.into(),
+            fullscreen,
+            maximized,
+        });
+    };
+
+    // Pantalla completa en DP-1: solo ese monitor.
+    covered("DP-1", true, false);
+    wait_for(|| screen.lock().unwrap().paused.contains("DP-1")).await;
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(paused(&list, "DP-1"), json!("fullscreen"));
+    assert_eq!(paused(&list, "HDMI-A-1"), Value::Null);
+
+    // Maximizada: apagado por defecto.
+    covered("HDMI-A-1", false, true);
+    covered("DP-1", false, false);
+    wait_for(|| screen.lock().unwrap().paused.is_empty()).await;
+
+    // A mano y en pantalla completa: manda la pausa a mano; al salir de la pantalla
+    // completa sigue en pausa.
+    covered("DP-1", true, false);
+    wait_for(|| screen.lock().unwrap().paused.contains("DP-1")).await;
+    let r = c
+        .call(methods::PLAYBACK_PAUSE, json!({"output": "DP-1"}))
+        .await
+        .unwrap();
+    assert_eq!(paused(&r, "DP-1"), json!("manual"));
+    covered("DP-1", false, false);
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(paused(&list, "DP-1"), json!("manual"));
+    c.call(methods::PLAYBACK_RESUME, Value::Null).await.unwrap();
+    assert!(screen.lock().unwrap().paused.is_empty());
+
+    // KDE: el complemento pausó solo; `outputs` lo muestra.
+    screen
+        .lock()
+        .unwrap()
+        .window_pauses
+        .insert("HDMI-A-1".into(), PauseReason::Fullscreen);
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(paused(&list, "HDMI-A-1"), json!("fullscreen"));
+    assert_eq!(paused(&list, "DP-1"), Value::Null);
     stop(c, task).await;
 }

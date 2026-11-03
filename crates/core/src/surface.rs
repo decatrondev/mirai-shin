@@ -141,6 +141,14 @@ pub enum SurfaceEvent {
     OutputRemoved {
         name: String,
     },
+    /// Cambió lo que tapa el fondo de un monitor (fase 3.3): una ventana en pantalla completa
+    /// o maximizada (ver `pause::covered`). Solo las superficies que lo saben por su cuenta
+    /// (Sway/Hyprland); en KDE el complemento pausa solo (ver `Surface::window_pause`).
+    Covered {
+        output: String,
+        fullscreen: bool,
+        maximized: bool,
+    },
 }
 
 /// Por dónde una superficie entrega sus avisos. Se le da al crearla; la llama desde su
@@ -227,6 +235,20 @@ pub trait Surface: Send {
     fn set_paused(&mut self, output: &str, paused: bool) -> Result<(), SurfaceError> {
         let _ = (output, paused);
         Err(SurfaceError::PauseUnsupported)
+    }
+
+    /// Ajustes de pausa por ventanas (fase 3.3), para las superficies que pausan solas al
+    /// ver una ventana encima (KDE: lo decide el complemento, sin esperar al daemon). Se llama
+    /// una vez al empezar. Las demás no hacen nada: avisan con `SurfaceEvent::Covered`.
+    fn set_window_rules(&mut self, settings: &crate::pause::PauseSettings) {
+        let _ = settings;
+    }
+
+    /// Si el video de `output` está en pausa porque la superficie lo decidió sola (una
+    /// ventana encima, en KDE), el motivo. Se pregunta solo para `outputs`.
+    fn window_pause(&self, output: &str) -> Option<crate::pause::PauseReason> {
+        let _ = output;
+        None
     }
 
     /// Quita el fondo de un monitor (vuelve a verse el del sistema).

@@ -107,9 +107,113 @@ pub fn decide(
     checks.into_iter().find(|(on, _)| *on).map(|(_, r)| r)
 }
 
+/// Una ventana, como la informa el compositor (Sway/Hyprland, `wlr-foreign-toplevel`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Window {
+    /// Monitores donde está (normalmente uno).
+    pub outputs: Vec<String>,
+    pub fullscreen: bool,
+    pub maximized: bool,
+    pub minimized: bool,
+    /// Es la que tiene el foco.
+    pub activated: bool,
+}
+
+/// Qué tapa el fondo de un monitor.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Cover {
+    pub fullscreen: bool,
+    pub maximized: bool,
+}
+
+/// Qué monitores tienen el fondo tapado, con la regla que salió de la prueba 3.0 en Sway:
+/// una ventana en pantalla completa (o maximizada) tapa su monitor si **es la activa**, o si
+/// la activa está **en otro monitor** (el juego del monitor A sigue tapándolo aunque se haga
+/// clic en el B). Así no cuenta una ventana que quedó en un escritorio virtual oculto (Sway
+/// la sigue informando en pantalla completa en ese monitor, pero ya no es la activa), y con
+/// un escritorio vacío (ninguna activa) no se pausa nada. Las minimizadas no tapan.
+/// Devuelve solo los monitores tapados.
+pub fn covered(windows: &[Window]) -> std::collections::HashMap<String, Cover> {
+    let active: Vec<&String> = windows
+        .iter()
+        .filter(|w| w.activated)
+        .flat_map(|w| &w.outputs)
+        .collect();
+    let mut out: std::collections::HashMap<String, Cover> = std::collections::HashMap::new();
+    for w in windows {
+        if w.minimized || !(w.fullscreen || w.maximized) {
+            continue;
+        }
+        for o in &w.outputs {
+            let visible = w.activated || (!active.is_empty() && !active.contains(&o));
+            if !visible {
+                continue;
+            }
+            let c = out.entry(o.clone()).or_default();
+            c.fullscreen |= w.fullscreen;
+            c.maximized |= w.maximized;
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn win(output: &str, f: impl FnOnce(&mut Window)) -> Window {
+        let mut w = Window {
+            outputs: vec![output.into()],
+            ..Default::default()
+        };
+        f(&mut w);
+        w
+    }
+
+    #[test]
+    fn ventanas_que_tapan() {
+        let full = |o: &str, active: bool| {
+            win(o, |w| {
+                w.fullscreen = true;
+                w.activated = active;
+            })
+        };
+        // Activa en pantalla completa: tapa su monitor, no el otro.
+        let c = covered(&[full("A", true)]);
+        assert!(c["A"].fullscreen);
+        assert!(!c.contains_key("B"));
+        // Clic en una ventana del monitor B: el juego de A sigue tapando A.
+        let c = covered(&[full("A", false), win("B", |w| w.activated = true)]);
+        assert!(c["A"].fullscreen);
+        assert!(!c.contains_key("B"));
+        // Otra ventana activa en el mismo monitor: la de pantalla completa quedó en un
+        // escritorio oculto (Sway la sigue informando): no tapa.
+        let c = covered(&[full("A", false), win("A", |w| w.activated = true)]);
+        assert!(c.is_empty());
+        // Escritorio vacío: ninguna activa, no se pausa.
+        assert!(covered(&[full("A", false)]).is_empty());
+        // Minimizada: no tapa.
+        let c = covered(&[win("A", |w| {
+            w.fullscreen = true;
+            w.activated = true;
+            w.minimized = true;
+        })]);
+        assert!(c.is_empty());
+        // Maximizada activa.
+        let c = covered(&[win("A", |w| {
+            w.maximized = true;
+            w.activated = true;
+        })]);
+        assert_eq!(
+            c["A"],
+            Cover {
+                fullscreen: false,
+                maximized: true
+            }
+        );
+        // Una normal activa no tapa nada.
+        assert!(covered(&[win("A", |w| w.activated = true)]).is_empty());
+    }
 
     fn out(f: impl FnOnce(&mut OutputSignals)) -> OutputSignals {
         let mut o = OutputSignals::default();

@@ -4,6 +4,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 const MAIN_QML: &str = include_str!("../../../packaging/kde-wallpaper/contents/ui/main.qml");
+const WINDOWS_QML: &str = include_str!("../../../packaging/kde-wallpaper/contents/ui/Windows.qml");
 const MAIN_XML: &str = include_str!("../../../packaging/kde-wallpaper/contents/config/main.xml");
 
 /// Id del complemento en Plasma: el id de la app.
@@ -38,6 +39,7 @@ pub fn files() -> Vec<(&'static str, String)> {
             serde_json::to_string_pretty(&metadata).unwrap_or_default(),
         ),
         ("contents/ui/main.qml", MAIN_QML.to_string()),
+        ("contents/ui/Windows.qml", WINDOWS_QML.to_string()),
         ("contents/config/main.xml", MAIN_XML.to_string()),
     ]
 }
@@ -97,7 +99,8 @@ mod tests {
         assert_eq!(meta["KPlugin"]["Id"], plugin_id());
         assert_eq!(meta["KPlugin"]["Name"], plugin_name());
         assert!(f[1].1.contains("WallpaperItem"));
-        assert!(f[2].1.contains(r#"name="Image""#));
+        assert!(f[2].1.contains("TasksModel"));
+        assert!(f[3].1.contains(r#"name="Image""#));
     }
 
     #[test]

@@ -45,14 +45,33 @@ pub fn image_entries(url: &str) -> Vec<(&'static str, String)> {
 
 /// Configuración para reproducir un video. El modo y la pausa antes que el video, para que
 /// arranque ya encuadrado (y en pausa si toca); la imagen anterior la suelta el complemento
-/// cuando el video se ve.
-pub fn video_entries(url: &str, mode: &str, paused: bool) -> Vec<(&'static str, String)> {
+/// cuando el video se ve. `pause_when`: ver `pause_when`.
+pub fn video_entries(
+    url: &str,
+    mode: &str,
+    paused: bool,
+    pause_when: &str,
+) -> Vec<(&'static str, String)> {
     vec![
         ("Mode", mode.to_string()),
         ("Paused", paused_value(paused)),
+        ("PauseWhen", pause_when.to_string()),
         ("Video", url.to_string()),
         ("Image", String::new()),
     ]
+}
+
+/// Valor de la clave `PauseWhen` (fase 3.3): con qué ventanas encima pausa solo el
+/// complemento.
+pub fn pause_when(on_fullscreen: bool, on_maximized: bool) -> String {
+    let mut words = Vec::new();
+    if on_fullscreen {
+        words.push("fullscreen");
+    }
+    if on_maximized {
+        words.push("maximized");
+    }
+    words.join(" ")
 }
 
 /// Valor de la clave `Paused` (fase 3).
@@ -107,6 +126,30 @@ if (!d || d.wallpaperPlugin != {id}) {{ print(\"none\"); }} else {{
         out = lit(output),
         id = lit(plugin_id),
     )
+}
+
+/// Lee por qué ventana pausó solo el complemento en `output` (`Covered`, fase 3.3). Imprime
+/// `covered:<valor>` o `none`.
+pub fn read_covered(output: &str, plugin_id: &str) -> String {
+    format!(
+        "var s = screenForConnector({out});
+var d = s >= 0 ? desktopForScreen(s) : undefined;
+if (!d || d.wallpaperPlugin != {id}) {{ print(\"none\"); }} else {{
+  d.currentConfigGroup = [\"Wallpaper\", {id}, \"General\"];
+  print(\"covered:\" + d.readConfig(\"Covered\"));
+}}",
+        out = lit(output),
+        id = lit(plugin_id),
+    )
+}
+
+/// De la respuesta de `read_covered`: `fullscreen`, `maximized` o nada.
+pub fn parse_covered(reply: &str) -> Option<&'static str> {
+    match reply.trim().strip_prefix("covered:")? {
+        "fullscreen" => Some("fullscreen"),
+        "maximized" => Some("maximized"),
+        _ => None,
+    }
 }
 
 /// De la respuesta de `read_status`, el código del problema si el complemento informó uno
@@ -176,15 +219,20 @@ mod tests {
             image_entries("file:///a.png"),
             vec![("Image", "file:///a.png".into()), ("Video", String::new())]
         );
-        let v = video_entries("file:///v.mp4", "fit", false);
+        let v = video_entries("file:///v.mp4", "fit", false, "fullscreen");
         assert_eq!(v[0], ("Mode", "fit".into()));
         assert_eq!(v[1], ("Paused", String::new()));
-        assert_eq!(v[2], ("Video", "file:///v.mp4".into()));
-        assert_eq!(v[3], ("Image", String::new()));
+        assert_eq!(v[2], ("PauseWhen", "fullscreen".into()));
+        assert_eq!(v[3], ("Video", "file:///v.mp4".into()));
+        assert_eq!(v[4], ("Image", String::new()));
         assert_eq!(
-            video_entries("file:///v.mp4", "fill", true)[1],
+            video_entries("file:///v.mp4", "fill", true, "")[1],
             ("Paused", "true".into())
         );
+        assert_eq!(pause_when(true, false), "fullscreen");
+        assert_eq!(pause_when(true, true), "fullscreen maximized");
+        assert_eq!(pause_when(false, true), "maximized");
+        assert_eq!(pause_when(false, false), "");
         let w = write("DP-1", &[("Paused", "true")], "net.x.Y");
         assert!(w.contains(r#"d.wallpaperPlugin != "net.x.Y""#));
         assert!(w.contains(r#"d.writeConfig("Paused", "true");"#));
@@ -225,6 +273,17 @@ mod tests {
             "TypeError: x",
         ] {
             assert_eq!(parse_status(nada), None, "{nada}");
+        }
+    }
+
+    #[test]
+    fn ventana_encima() {
+        let js = read_covered("DP-1", "net.x.Y");
+        assert!(js.contains(r#"d.readConfig("Covered")"#));
+        assert_eq!(parse_covered("covered:fullscreen\n"), Some("fullscreen"));
+        assert_eq!(parse_covered("covered:maximized"), Some("maximized"));
+        for nada in ["covered:", "none", "covered:x", "", "TypeError"] {
+            assert_eq!(parse_covered(nada), None, "{nada}");
         }
     }
 
