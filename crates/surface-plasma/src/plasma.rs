@@ -65,7 +65,10 @@ impl PlasmaSurface {
             current: HashMap::new(),
             videos: HashSet::new(),
             paused: HashSet::new(),
-            pause_when: script::pause_when(true, false),
+            pause_when: {
+                let d = PauseSettings::default();
+                script::pause_when(d.on_fullscreen, d.on_maximized)
+            },
             counter: 0,
         };
         surface.forget_old_frames();

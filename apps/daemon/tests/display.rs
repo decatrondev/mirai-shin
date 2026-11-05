@@ -953,8 +953,12 @@ async fn pausa_por_ventanas() {
     assert_eq!(paused(&list, "DP-1"), json!("fullscreen"));
     assert_eq!(paused(&list, "HDMI-A-1"), Value::Null);
 
-    // Maximizada: apagado por defecto.
+    // Maximizada en el otro monitor: también pausa, con su motivo.
     covered("HDMI-A-1", false, true);
+    wait_for(|| screen.lock().unwrap().paused.contains("HDMI-A-1")).await;
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(paused(&list, "HDMI-A-1"), json!("maximized"));
+    covered("HDMI-A-1", false, false);
     covered("DP-1", false, false);
     wait_for(|| screen.lock().unwrap().paused.is_empty()).await;
 

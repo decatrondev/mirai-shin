@@ -16,7 +16,7 @@ pub enum PauseReason {
     Battery,
     /// Hay una app en pantalla completa en ese monitor.
     Fullscreen,
-    /// Hay una ventana maximizada en ese monitor (apagado por defecto).
+    /// Hay una ventana maximizada en ese monitor.
     Maximized,
 }
 
@@ -44,12 +44,13 @@ pub struct PauseSettings {
 }
 
 impl Default for PauseSettings {
-    /// Decidido con Anthony el 2026-11-01: se pausa en los cuatro casos; con una ventana
-    /// maximizada no (el fondo todavía se ve en parte por los bordes y la barra).
+    /// Decidido con Anthony el 2026-11-05: se pausa en los cinco casos, también con una ventana
+    /// maximizada (casi no se ve el fondo). Una ventana normal encima no pausa: el fondo se
+    /// sigue viendo y se notaría congelado.
     fn default() -> Self {
         Self {
             on_fullscreen: true,
-            on_maximized: false,
+            on_maximized: true,
             on_battery: true,
             on_lock: true,
             on_screen_off: true,
@@ -242,16 +243,16 @@ mod tests {
             decide(&s, &sys, &out(|o| o.screen_off = true)),
             Some(PauseReason::ScreenOff)
         );
-        // Maximizada: apagado por defecto.
-        assert_eq!(decide(&s, &sys, &out(|o| o.maximized = true)), None);
-        let con_max = PauseSettings {
-            on_maximized: true,
-            ..s
-        };
+        // Maximizada: pausa por defecto, y se puede apagar.
         assert_eq!(
-            decide(&con_max, &sys, &out(|o| o.maximized = true)),
+            decide(&s, &sys, &out(|o| o.maximized = true)),
             Some(PauseReason::Maximized)
         );
+        let sin_max = PauseSettings {
+            on_maximized: false,
+            ..s
+        };
+        assert_eq!(decide(&sin_max, &sys, &out(|o| o.maximized = true)), None);
         let bat = SystemSignals {
             on_battery: true,
             ..sys
