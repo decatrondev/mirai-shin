@@ -11,9 +11,10 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use miraishin_core::copies::{fixable_by_copy, CopyLevel, CopyTarget, VideoSaver};
+use miraishin_core::copies::{fixable_by_copy, CopyLevel, CopyTarget, VideoInfo, VideoSaver};
 use miraishin_core::fit::FitMode;
 use miraishin_core::pause::{self, OutputSignals, PauseReason, PauseSettings, SystemSignals};
+use miraishin_core::playback::{self, PlaybackSettings};
 use miraishin_core::surface::Size;
 use miraishin_core::surface::{EventSink, Frame, OutputInfo, Surface, SurfaceError, SurfaceEvent};
 use miraishin_ipc::{events, Event, OutputItem, OutputsList};
@@ -50,6 +51,8 @@ enum Msg {
     Locked(bool),
     /// El equipo se va a suspender (`true`) o ya despertó (fase 3.4).
     Asleep(bool),
+    /// Velocidad, brillo y límite de cuadros nuevos (fase 3.5).
+    Playback(PlaybackSettings, oneshot::Sender<()>),
     Stop,
 }
 
@@ -84,6 +87,10 @@ pub struct Display {
     available: bool,
     /// Avisa cuando el hilo terminó y soltó la superficie (ver `stop`).
     finished: Arc<Mutex<mpsc::Receiver<()>>>,
+    /// La superficie sabe cambiar velocidad y brillo (fase 3.5).
+    playback_supported: bool,
+    /// El límite de cuadros lo hace el daemon con una copia del video (KDE).
+    fps_by_copy: bool,
 }
 
 /// Cuánto espera `stop` a que el hilo suelte la superficie.
@@ -97,18 +104,29 @@ impl Display {
         events: broadcast::Sender<Event>,
         video: VideoOptions,
         pause: PauseSettings,
+        playback: PlaybackSettings,
     ) -> Self {
         let (tx, rx) = mpsc::channel();
         let sink_tx = tx.clone();
         let sink: EventSink = Box::new(move |e| {
             let _ = sink_tx.send(Msg::Surface(e));
         });
-        let (surface, name, available) = match factory(sink) {
+        let (mut surface, name, available) = match factory(sink) {
             Ok((s, name)) => (Some(s), name.to_string(), true),
             Err(code) => {
                 tracing::warn!(code = %code, "no wallpaper surface on this desktop");
                 (None, code, false)
             }
+        };
+        let (playback_supported, fps_by_copy) = match surface.as_mut() {
+            Some(s) => (
+                !matches!(
+                    s.set_playback(&playback),
+                    Err(SurfaceError::PlaybackUnsupported)
+                ),
+                s.fps_limit_by_copy(),
+            ),
+            None => (false, false),
         };
         if surface.is_some() {
             // Copias de fondos que ya no existen y copias a medias de otra sesión.
@@ -148,6 +166,10 @@ impl Display {
             signals: HashMap::new(),
             paused: HashMap::new(),
             pause_unsupported: HashSet::new(),
+            playback,
+            fps_by_copy,
+            infos: HashMap::new(),
+            fps_copy: HashMap::new(),
         };
         let (finished_tx, finished) = mpsc::channel();
         let started = std::thread::Builder::new()
@@ -164,6 +186,8 @@ impl Display {
             surface: name,
             available: available && started.is_ok(),
             finished: Arc::new(Mutex::new(finished)),
+            playback_supported,
+            fps_by_copy,
         };
         display.apply_nowait();
         display
@@ -197,6 +221,20 @@ impl Display {
     pub async fn pause(&self, output: Option<String>, paused: bool) {
         let (tx, rx) = oneshot::channel();
         if self.tx.send(Msg::Pause(output, paused, tx)).is_ok() {
+            let _ = rx.await;
+        }
+    }
+
+    /// (sabe cambiar velocidad y brillo, el límite de cuadros va con copia)
+    pub fn playback_support(&self) -> (bool, bool) {
+        (self.playback_supported, self.fps_by_copy)
+    }
+
+    /// Velocidad, brillo y límite nuevos; espera a que se apliquen (en KDE, si cambió el
+    /// límite, los videos se vuelven a poner y puede empezar una copia).
+    pub async fn set_playback(&self, playback: PlaybackSettings) {
+        let (tx, rx) = oneshot::channel();
+        if self.tx.send(Msg::Playback(playback, tx)).is_ok() {
             let _ = rx.await;
         }
     }
@@ -283,6 +321,14 @@ struct Worker {
     paused: HashMap<String, Option<PauseReason>>,
     /// Monitores donde se quiso pausar y la superficie no sabe.
     pause_unsupported: HashSet<String>,
+    // ---- Velocidad, brillo y límite de cuadros (fase 3.5)
+    playback: PlaybackSettings,
+    /// El límite lo hace una copia del video (KDE).
+    fps_by_copy: bool,
+    /// Cabecera de cada video (carpeta, versión), leída una vez con `ffmpeg`.
+    infos: HashMap<(String, String), Option<VideoInfo>>,
+    /// Monitores cuya copia (hecha o en curso) es por el límite, y a cuántos cuadros.
+    fps_copy: HashMap<String, u32>,
 }
 
 impl Worker {
@@ -395,6 +441,10 @@ impl Worker {
                 Msg::OnBattery(on) => self.set_system(|s| &mut s.on_battery, on),
                 Msg::Locked(on) => self.set_system(|s| &mut s.locked, on),
                 Msg::Asleep(on) => self.set_system(|s| &mut s.asleep, on),
+                Msg::Playback(p, reply) => {
+                    self.set_playback(p);
+                    let _ = reply.send(());
+                }
                 Msg::Stop => break,
             }
         }
@@ -429,6 +479,7 @@ impl Worker {
                 self.videos.remove(&output.name);
                 self.copying.remove(&output.name);
                 self.copy_label.remove(&output.name);
+                self.fps_copy.remove(&output.name);
                 if self.shown.remove(&output.name).is_some() || self.first {
                     let _ = surface.clear(&output.name);
                     changed = true;
@@ -454,6 +505,7 @@ impl Worker {
             }
             self.copying.remove(&output.name);
             self.copy_label.remove(&output.name);
+            self.fps_copy.remove(&output.name);
             // Video: lo reproduce la superficie, el original o una copia compatible (2.9).
             // Si no sabe, el archivo falta o la copia falla, respaldo.
             let source = match source {
@@ -462,6 +514,7 @@ impl Worker {
                     let fits = fits_saver(
                         &self.video,
                         &mut self.fits_saver,
+                        &mut self.infos,
                         &folder,
                         &key.version,
                         &path,
@@ -474,7 +527,40 @@ impl Worker {
                         largest,
                         fits,
                     );
-                    let play = match level.target(largest) {
+                    // Límite de cuadros donde el reproductor no lo hace (KDE): con una copia.
+                    let base = level.target(largest);
+                    let limit = if self.fps_by_copy {
+                        self.playback.fps_limit
+                    } else {
+                        0
+                    };
+                    let target = if limit > 0 {
+                        let info =
+                            video_info(&self.video, &mut self.infos, &folder, &key.version, &path);
+                        playback::limit_copy(base, limit, largest, info.as_ref())
+                    } else {
+                        base
+                    };
+                    // Si la copia por el límite no se pudo hacer (sin ffmpeg, sin espacio), el
+                    // video sigue sin límite: el límite es para ahorrar, no debe dejarlo gris.
+                    let target = match target {
+                        Some(t)
+                            if target != base
+                                && self.failed.contains_key(&copies::copy_path(
+                                    &self.video.copies_dir,
+                                    &folder,
+                                    &key.version,
+                                    &t,
+                                )) =>
+                        {
+                            base
+                        }
+                        t => t,
+                    };
+                    if target != base {
+                        self.fps_copy.insert(output.name.clone(), limit);
+                    }
+                    let play = match target {
                         None => Ok(Some((path.clone(), None))),
                         Some(t) => {
                             let cp = copies::copy_path(
@@ -566,6 +652,7 @@ impl Worker {
                     self.shown
                         .insert(output.name.clone(), Shown { problem, ..key });
                     self.videos.remove(&output.name);
+                    self.fps_copy.remove(&output.name);
                     changed = true;
                 }
                 Err(e) => {
@@ -588,6 +675,8 @@ impl Worker {
             .retain(|(_, name)| present.contains(&name.as_str()));
         self.signals
             .retain(|name, _| present.contains(&name.as_str()));
+        self.fps_copy
+            .retain(|name, _| present.contains(&name.as_str()));
         if self.update_pause() {
             changed = true;
         }
@@ -602,8 +691,38 @@ impl Worker {
             .send(Event::new(events::OUTPUTS_CHANGED, json!(self.list())));
     }
 
-    /// Pausa a mano: sin monitor, todos; con monitor, solo ese. Quitar la pausa de un monitor
-    /// cuando estaban todos en pausa deja en pausa a los demás.
+    /// Velocidad, brillo y límite nuevos. Si el límite lo hace una copia y cambió, los videos
+    /// se vuelven a poner (con la copia a ese ritmo, o el original si ya no hay límite).
+    fn set_playback(&mut self, p: PlaybackSettings) {
+        let old = self.playback;
+        self.playback = p;
+        tracing::info!(
+            speed = p.speed,
+            brightness = p.brightness,
+            fps_limit = p.fps_limit,
+            "playback settings"
+        );
+        if let Some(s) = self.surface.as_mut() {
+            if let Err(e) = s.set_playback(&p) {
+                if e != SurfaceError::PlaybackUnsupported {
+                    tracing::warn!(code = e.as_str(), "could not change the playback settings");
+                }
+            }
+        }
+        if self.fps_by_copy && old.fps_limit != p.fps_limit {
+            let again: Vec<String> = self
+                .videos
+                .iter()
+                .chain(self.copying.keys())
+                .cloned()
+                .collect();
+            for o in again {
+                self.shown.remove(&o);
+            }
+            self.apply();
+        }
+    }
+
     /// Cambia una señal de todo el equipo y vuelve a decidir la pausa.
     fn set_system(&mut self, field: fn(&mut SystemSignals) -> &mut bool, on: bool) {
         let f = field(&mut self.system);
@@ -830,6 +949,7 @@ impl Worker {
                             })
                             .map(|r| r.as_str().to_string()),
                         pause_unsupported: self.pause_unsupported.contains(&o.name),
+                        fps_copy: self.fps_copy.get(&o.name).copied(),
                     }
                 })
                 .collect(),
@@ -846,6 +966,7 @@ impl Worker {
 fn fits_saver(
     video: &VideoOptions,
     cache: &mut HashMap<(String, String), bool>,
+    infos: &mut HashMap<(String, String), Option<VideoInfo>>,
     folder: &str,
     version: &str,
     path: &Path,
@@ -858,13 +979,30 @@ fn fits_saver(
     if let Some(f) = cache.get(&key) {
         return *f;
     }
-    let info = copies::probe(video.ffmpeg.as_deref(), path);
+    let info = video_info(video, infos, folder, version, path);
     let fits = info
         .as_ref()
         .is_some_and(|i| miraishin_core::copies::already_fits(i, &CopyTarget::SAVER));
-    tracing::info!(folder = %folder, info = ?info, fits, "video header read");
     cache.insert(key, fits);
     fits
+}
+
+/// Cabecera del video (códec, tamaño, cuadros), leída una vez por versión del fondo.
+fn video_info(
+    video: &VideoOptions,
+    cache: &mut HashMap<(String, String), Option<VideoInfo>>,
+    folder: &str,
+    version: &str,
+    path: &Path,
+) -> Option<VideoInfo> {
+    let key = (folder.to_string(), version.to_string());
+    if let Some(i) = cache.get(&key) {
+        return i.clone();
+    }
+    let info = copies::probe(video.ffmpeg.as_deref(), path);
+    tracing::info!(folder = %folder, info = ?info, "video header read");
+    cache.insert(key, info.clone());
+    info
 }
 
 /// Nivel con que se muestra un video: el de inicio según el ajuste y la GPU, lo que ya subió

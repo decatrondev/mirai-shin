@@ -2,8 +2,8 @@ mod i18n;
 
 use i18n::{fill, t};
 use miraishin_ipc::{
-    codes, methods, CallError, Client, Endpoint, LibraryList, OutputsList, RescanResult,
-    StatusResult,
+    codes, methods, CallError, Client, Endpoint, LibraryList, OutputsList, PlaybackInfo,
+    RescanResult, StatusResult,
 };
 use miraishin_store::{Language, Paths, Settings};
 use serde_json::{json, Value};
@@ -76,6 +76,26 @@ fn parse(args: &[String]) -> Parsed {
         ["clear"] => run(methods::WALLPAPER_CLEAR, json!({ "output": monitor })),
         ["pause"] => run(methods::PLAYBACK_PAUSE, json!({ "output": monitor })),
         ["resume"] => run(methods::PLAYBACK_RESUME, json!({ "output": monitor })),
+        ["speed", v] => match number(v) {
+            Some(n) => run(methods::PLAYBACK_SET, json!({ "speed": n })),
+            None => Parsed::Bad("bad_number", v.to_string()),
+        },
+        ["brightness", v] => match integer(v) {
+            Some(n) => run(methods::PLAYBACK_SET, json!({ "brightness": n })),
+            None => Parsed::Bad("bad_number", v.to_string()),
+        },
+        ["fps", v] => {
+            let n = if matches!(*v, "off" | "no" | "0") {
+                Some(0)
+            } else {
+                integer(v)
+            };
+            match n {
+                Some(n) => run(methods::PLAYBACK_SET, json!({ "fps_limit": n })),
+                None => Parsed::Bad("bad_number", v.to_string()),
+            }
+        }
+        ["speed" | "brightness" | "fps"] => Parsed::Bad("needs_value", positional[0].to_string()),
         [cmd, ..] if KNOWN.contains(cmd) => {
             Parsed::Bad("extra_argument", positional[1..].join(" "))
         }
@@ -84,9 +104,33 @@ fn parse(args: &[String]) -> Parsed {
 }
 
 const KNOWN: &[&str] = &[
-    "status", "list", "rescan", "ping", "shutdown", "outputs", "set", "clear", "pause", "resume",
+    "status",
+    "list",
+    "rescan",
+    "ping",
+    "shutdown",
+    "outputs",
+    "set",
+    "clear",
+    "pause",
+    "resume",
+    "speed",
+    "brightness",
+    "fps",
     "help",
 ];
+
+/// Número con punto o coma decimal (`1.5`, `1,5`).
+fn number(text: &str) -> Option<f64> {
+    text.replace(',', ".")
+        .parse::<f64>()
+        .ok()
+        .filter(|n| n.is_finite())
+}
+
+fn integer(text: &str) -> Option<i64> {
+    text.parse::<i64>().ok()
+}
 
 fn main() -> ExitCode {
     let lang = language();
@@ -253,6 +297,13 @@ fn print_human(lang: Language, method: &str, value: Value) {
             if let Some(key) = lock {
                 println!("{}", t(lang, key));
             }
+            // `None` con un daemon anterior a la fase 3.5.
+            if let Some(p) = &s.playback {
+                println!(
+                    "{}",
+                    fill(t(lang, "status_playback"), &[&playback_line(lang, p)])
+                );
+            }
         }
         methods::OUTPUTS_LIST => print_outputs(lang, value),
         methods::WALLPAPER_SET | methods::WALLPAPER_CLEAR => {
@@ -276,6 +327,21 @@ fn print_human(lang: Language, method: &str, value: Value) {
                 println!("{}", t(lang, "pause_unsupported"));
             }
             print_outputs(lang, value);
+        }
+        methods::PLAYBACK_SET => {
+            let p: PlaybackInfo = serde_json::from_value(value).unwrap_or_default();
+            println!(
+                "{}",
+                fill(t(lang, "playback_done"), &[&playback_line(lang, &p)])
+            );
+            if !p.supported {
+                println!("{}", t(lang, "playback_unsupported"));
+            } else if p.fps_by_copy && p.fps_limit > 0 {
+                println!("{}", t(lang, "playback_fps_copy"));
+            }
+            if p.not_saved {
+                println!("{}", t(lang, "playback_not_saved"));
+            }
         }
         methods::LIBRARY_LIST => {
             let list: LibraryList = serde_json::from_value(value).unwrap_or_default();
@@ -330,6 +396,7 @@ fn explained(code: &str) -> Option<&'static str> {
         codes::WALLPAPER_KIND_UNSUPPORTED => "err_kind_unsupported",
         codes::UNKNOWN_OUTPUT => "err_unknown_output",
         codes::INVALID_MODE => "err_invalid_mode",
+        codes::OUT_OF_RANGE => "err_out_of_range",
         _ => return None,
     })
 }
@@ -353,6 +420,25 @@ fn print_surface(lang: Language, surface: &str, available: bool) {
     println!("{}", fill(t(lang, key), &[surface]));
 }
 
+/// «velocidad 1.5×, brillo -30, sin límite de cuadros».
+fn playback_line(lang: Language, p: &PlaybackInfo) -> String {
+    let fps = if p.fps_limit == 0 {
+        t(lang, "playback_no_limit").to_string()
+    } else {
+        fill(t(lang, "playback_limit"), &[&p.fps_limit.to_string()])
+    };
+    fill(
+        t(lang, "playback_line"),
+        &[&speed_text(p.speed), &p.brightness.to_string(), &fps],
+    )
+}
+
+/// `1`, `1.5`, `0.25` (sin ceros de más).
+fn speed_text(speed: f64) -> String {
+    let s = format!("{speed:.2}");
+    s.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
 fn print_outputs(lang: Language, value: Value) {
     let list: OutputsList = serde_json::from_value(value).unwrap_or_default();
     if !list.surface_available {
@@ -366,19 +452,26 @@ fn print_outputs(lang: Language, value: Value) {
     }
     for o in list.items {
         let what = match (&o.wallpaper, &o.problem) {
-            (Some(w), _) if o.copy_progress.is_some() => fill(
-                t(lang, "outputs_copying"),
-                &[w, &o.copy_progress.unwrap_or_default().to_string()],
-            ),
+            (Some(w), _) if o.copy_progress.is_some() => {
+                let pct = o.copy_progress.unwrap_or_default().to_string();
+                match o.fps_copy {
+                    Some(fps) => fill(t(lang, "outputs_copying_fps"), &[w, &fps.to_string(), &pct]),
+                    None => fill(t(lang, "outputs_copying"), &[w, &pct]),
+                }
+            }
             (Some(w), Some(p)) => match t(lang, &format!("problem_{p}")) {
                 "" => fill(t(lang, "outputs_problem"), &[w, p]),
                 own => fill(own, &[w]),
             },
             (Some(w), None) => {
                 let mode = o.mode.as_deref().unwrap_or_default();
-                match &o.copy {
-                    Some(size) => fill(t(lang, "outputs_showing_copy"), &[w, mode, size]),
-                    None => fill(t(lang, "outputs_showing"), &[w, mode]),
+                match (&o.copy, o.fps_copy) {
+                    (Some(_), Some(fps)) => fill(
+                        t(lang, "outputs_showing_fps_copy"),
+                        &[w, mode, &fps.to_string()],
+                    ),
+                    (Some(size), None) => fill(t(lang, "outputs_showing_copy"), &[w, mode, size]),
+                    (None, _) => fill(t(lang, "outputs_showing"), &[w, mode]),
                 }
             }
             (None, _) => t(lang, "outputs_empty").to_string(),
@@ -493,6 +586,43 @@ mod tests {
         assert_eq!(
             p(&["pause", "x"]),
             Parsed::Bad("extra_argument", "x".into())
+        );
+    }
+
+    #[test]
+    fn velocidad_brillo_y_cuadros() {
+        let run = |args: &[&str]| match p(args) {
+            Parsed::Run(c) => (c.method, c.params),
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(
+            run(&["speed", "1,5"]),
+            (methods::PLAYBACK_SET, json!({"speed": 1.5}))
+        );
+        assert_eq!(
+            run(&["brightness", "-30"]),
+            (methods::PLAYBACK_SET, json!({"brightness": -30}))
+        );
+        assert_eq!(
+            run(&["fps", "30"]),
+            (methods::PLAYBACK_SET, json!({"fps_limit": 30}))
+        );
+        assert_eq!(
+            run(&["fps", "off"]),
+            (methods::PLAYBACK_SET, json!({"fps_limit": 0}))
+        );
+        assert_eq!(
+            p(&["speed", "rápido"]),
+            Parsed::Bad("bad_number", "rápido".into())
+        );
+        assert_eq!(
+            p(&["brightness", "1.5"]),
+            Parsed::Bad("bad_number", "1.5".into())
+        );
+        assert_eq!(p(&["fps"]), Parsed::Bad("needs_value", "fps".into()));
+        assert_eq!(
+            p(&["speed", "1", "2"]),
+            Parsed::Bad("extra_argument", "1 2".into())
         );
     }
 }

@@ -21,6 +21,9 @@ pub mod methods {
     /// Pausa a mano el video (fase 3): de todos los monitores o de uno.
     pub const PLAYBACK_PAUSE: &str = "playback.pause";
     pub const PLAYBACK_RESUME: &str = "playback.resume";
+    /// Velocidad, brillo y límite de cuadros (fase 3.5), para todos los monitores. Se guarda
+    /// en los ajustes.
+    pub const PLAYBACK_SET: &str = "playback.set";
 }
 
 pub mod events {
@@ -45,6 +48,8 @@ pub mod codes {
     pub const WALLPAPER_KIND_UNSUPPORTED: &str = "wallpaper_kind_unsupported";
     pub const UNKNOWN_OUTPUT: &str = "unknown_output";
     pub const INVALID_MODE: &str = "invalid_mode";
+    /// Un valor fuera de su rango (velocidad, brillo o límite de cuadros).
+    pub const OUT_OF_RANGE: &str = "out_of_range";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -119,7 +124,7 @@ pub struct HelloResult {
     pub methods: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct StatusResult {
     #[serde(default)]
     pub version: String,
@@ -157,6 +162,43 @@ pub struct StatusResult {
     /// sin permiso). Vacío con un daemon anterior.
     #[serde(default)]
     pub lock: String,
+    /// Velocidad, brillo y límite de cuadros (fase 3.5). `None` con un daemon anterior.
+    #[serde(default)]
+    pub playback: Option<PlaybackInfo>,
+}
+
+/// Velocidad, brillo y límite de cuadros (fase 3.5): en `status` y como respuesta de
+/// `playback.set`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PlaybackInfo {
+    #[serde(default)]
+    pub speed: f64,
+    #[serde(default)]
+    pub brightness: i32,
+    /// 0 = sin límite.
+    #[serde(default)]
+    pub fps_limit: u32,
+    /// El límite se hace con una copia del video a ese ritmo (KDE).
+    #[serde(default)]
+    pub fps_by_copy: bool,
+    /// `false` si este escritorio todavía no sabe aplicarlos (se guardan igual).
+    #[serde(default)]
+    pub supported: bool,
+    /// Solo en `playback.set`: no se pudo guardar en los ajustes (vale hasta reiniciar).
+    #[serde(default)]
+    pub not_saved: bool,
+}
+
+/// Para `playback.set`: lo que no viene no cambia.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PlaybackSetParams {
+    #[serde(default)]
+    pub speed: Option<f64>,
+    #[serde(default)]
+    pub brightness: Option<i64>,
+    /// 0 = sin límite.
+    #[serde(default)]
+    pub fps_limit: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -230,6 +272,9 @@ pub struct OutputItem {
     /// Se pidió una pausa pero este escritorio todavía no sabe pausar (`paused` vacío).
     #[serde(default)]
     pub pause_unsupported: bool,
+    /// La copia (o la que se está creando) es por el límite de cuadros: a cuántos (KDE).
+    #[serde(default)]
+    pub fps_copy: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

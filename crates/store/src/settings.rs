@@ -4,6 +4,7 @@
 
 use miraishin_core::copies::VideoSaver;
 use miraishin_core::pause::PauseSettings;
+use miraishin_core::playback::{self, PlaybackSettings};
 use std::path::{Path, PathBuf};
 use toml_edit::{value, DocumentMut};
 
@@ -79,7 +80,7 @@ impl LogLevel {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Settings {
     /// `None` = la carpeta por defecto (`<datos>/wallpapers`).
     pub wallpapers_dir: Option<PathBuf>,
@@ -90,6 +91,9 @@ pub struct Settings {
     /// Cuándo se pausa el video solo (fase 3): `pause_on_fullscreen`, `pause_on_maximized`,
     /// `pause_on_battery`, `pause_on_lock`, `pause_on_screen_off` (sí o no).
     pub pause: PauseSettings,
+    /// Velocidad, brillo y límite de cuadros (fase 3.5): `speed` (0,25–4), `brightness`
+    /// (−100–100) y `fps_limit` (0 = sin límite, hasta 240).
+    pub playback: PlaybackSettings,
 }
 
 /// Aviso al leer los ajustes: clave con valor no válido (se usó el valor por defecto),
@@ -156,6 +160,27 @@ impl Settings {
                 }
             }
         }
+        if let Some(item) = doc.get("speed") {
+            let v = item
+                .as_float()
+                .or_else(|| item.as_integer().map(|i| i as f64));
+            match v.and_then(playback::check_speed) {
+                Some(v) => s.playback.speed = v,
+                None => warnings.push(SettingsWarning::InvalidValue("speed")),
+            }
+        }
+        if let Some(item) = doc.get("brightness") {
+            match item.as_integer().and_then(playback::check_brightness) {
+                Some(v) => s.playback.brightness = v,
+                None => warnings.push(SettingsWarning::InvalidValue("brightness")),
+            }
+        }
+        if let Some(item) = doc.get("fps_limit") {
+            match item.as_integer().and_then(playback::check_fps_limit) {
+                Some(v) => s.playback.fps_limit = v,
+                None => warnings.push(SettingsWarning::InvalidValue("fps_limit")),
+            }
+        }
         (s, warnings)
     }
 
@@ -194,6 +219,15 @@ impl Settings {
         ] {
             doc[key] = value(v);
         }
+        let pb = &self.playback;
+        // `1` y no `1.0` en el archivo cuando es entero: se lee igual y se ve más simple.
+        if pb.speed.fract() == 0.0 {
+            doc["speed"] = value(pb.speed as i64);
+        } else {
+            doc["speed"] = value(pb.speed);
+        }
+        doc["brightness"] = value(i64::from(pb.brightness));
+        doc["fps_limit"] = value(i64::from(pb.fps_limit));
         doc.to_string()
     }
 }
@@ -236,6 +270,23 @@ mod tests {
         assert!(!s.pause.on_battery && s.pause.on_maximized && s.pause.on_lock);
         assert!(s.pause.on_fullscreen && s.pause.on_screen_off);
         assert_eq!(w, vec![SettingsWarning::InvalidValue("pause_on_lock")]);
+        let (s, w) = Settings::parse("speed = 1.5\nbrightness = -30\nfps_limit = 30\n");
+        assert_eq!(s.playback.speed, 1.5);
+        assert_eq!((s.playback.brightness, s.playback.fps_limit), (-30, 30));
+        assert!(w.is_empty());
+        let (s, w) = Settings::parse("speed = 2\nbrightness = 300\nfps_limit = -5\n");
+        assert_eq!(s.playback.speed, 2.0);
+        assert_eq!((s.playback.brightness, s.playback.fps_limit), (0, 0));
+        assert_eq!(
+            w,
+            vec![
+                SettingsWarning::InvalidValue("brightness"),
+                SettingsWarning::InvalidValue("fps_limit")
+            ]
+        );
+        let (s, w) = Settings::parse("speed = 9.0\n");
+        assert_eq!(s.playback.speed, 1.0);
+        assert_eq!(w, vec![SettingsWarning::InvalidValue("speed")]);
         let (s, w) = Settings::parse("esto no es toml = = =");
         assert_eq!(s, Settings::default());
         assert_eq!(w, vec![SettingsWarning::UnreadableFile]);
@@ -248,7 +299,7 @@ mod tests {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(
             &path,
-            "# mío\nfps_limit = 30 # de una versión nueva\nlanguage = \"en\"\n",
+            "# mío\nfutura = 30 # de una versión nueva\nlanguage = \"en\"\n",
         )
         .unwrap();
 
@@ -260,11 +311,27 @@ mod tests {
 
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(text.contains("# mío"));
-        assert!(text.contains("fps_limit = 30 # de una versión nueva"));
+        assert!(text.contains("futura = 30 # de una versión nueva"));
         let (again, w) = Settings::load(&path);
         assert!(w.is_empty());
         assert_eq!(again.language, Language::Es);
         assert_eq!(again.wallpapers_dir, Some(PathBuf::from("/fondos")));
+
+        let mut s = again;
+        s.playback.speed = 0.5;
+        s.playback.fps_limit = 24;
+        s.save(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            text.contains("speed = 0.5") && text.contains("fps_limit = 24"),
+            "{text}"
+        );
+        s.playback.speed = 2.0;
+        s.save(&path).unwrap();
+        assert!(std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("speed = 2\n"));
+        assert_eq!(Settings::load(&path).0.playback.speed, 2.0);
     }
 
     #[test]

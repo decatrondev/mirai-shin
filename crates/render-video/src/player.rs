@@ -9,6 +9,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use miraishin_core::fit::FitMode;
+use miraishin_core::playback::{self, PlaybackSettings};
 
 use crate::ffi::{self, Api};
 use crate::options;
@@ -165,6 +166,24 @@ impl Player {
     /// Pausa (`true`) o reanuda. En pausa mpv deja de decodificar y queda el último cuadro.
     pub fn set_paused(&self, paused: bool) -> Result<(), VideoError> {
         self.command(&["set", "pause", if paused { "yes" } else { "no" }])
+    }
+
+    /// Velocidad, brillo y límite de cuadros (fase 3.5). Se puede llamar con el video
+    /// andando. Devuelve `false` si mpv no tomó alguno (sigue con lo que sí tomó).
+    pub fn set_playback(&self, p: &PlaybackSettings) -> bool {
+        let speed = self.command(&["set", "speed", &p.speed_text()]).is_ok();
+        let brightness = self
+            .command(&["set", "brightness", &p.brightness.to_string()])
+            .is_ok();
+        // Si mpv no sabe los cuadros del video, el filtro con `source_fps` no arranca: se
+        // usa un ritmo fijo.
+        let fps = self
+            .command(&["set", "vf", &playback::mpv_fps_filter(p.fps_limit)])
+            .is_ok()
+            || self
+                .command(&["set", "vf", &playback::mpv_fps_filter_plain(p.fps_limit)])
+                .is_ok();
+        speed && brightness && fps
     }
 
     fn set(&self, name: &str, value: &str) -> bool {

@@ -4,6 +4,8 @@
 /// Tipo de fondo de Plasma por defecto, para devolver si no se sabe cuál había.
 pub const PLASMA_DEFAULT: &str = "org.kde.image";
 
+use miraishin_core::playback::{self, PlaybackSettings};
+
 fn lit(s: &str) -> String {
     serde_json::to_string(s).unwrap_or_else(|_| "\"\"".into())
 }
@@ -43,21 +45,33 @@ pub fn image_entries(url: &str) -> Vec<(&'static str, String)> {
     vec![("Image", url.to_string()), ("Video", String::new())]
 }
 
-/// Configuración para reproducir un video. El modo y la pausa antes que el video, para que
-/// arranque ya encuadrado (y en pausa si toca); la imagen anterior la suelta el complemento
+/// Configuración para reproducir un video. El modo, la pausa, la velocidad y el brillo
+/// antes que el video, para que arranque ya así; la imagen anterior la suelta el complemento
 /// cuando el video se ve. `pause_when`: ver `pause_when`.
 pub fn video_entries(
     url: &str,
     mode: &str,
     paused: bool,
     pause_when: &str,
+    playback: &PlaybackSettings,
 ) -> Vec<(&'static str, String)> {
-    vec![
+    let mut v = vec![
         ("Mode", mode.to_string()),
         ("Paused", paused_value(paused)),
         ("PauseWhen", pause_when.to_string()),
-        ("Video", url.to_string()),
-        ("Image", String::new()),
+    ];
+    v.extend(playback_entries(playback));
+    v.push(("Video", url.to_string()));
+    v.push(("Image", String::new()));
+    v
+}
+
+/// Claves `Speed` (velocidad del reproductor, `1` = normal) y `Brightness` (de −1 a 1,
+/// `0` = normal) de la fase 3.5. El límite de cuadros no va: en KDE lo hace una copia.
+pub fn playback_entries(p: &PlaybackSettings) -> Vec<(&'static str, String)> {
+    vec![
+        ("Speed", p.speed_text()),
+        ("Brightness", playback::plasma_brightness(p.brightness)),
     ]
 }
 
@@ -219,15 +233,27 @@ mod tests {
             image_entries("file:///a.png"),
             vec![("Image", "file:///a.png".into()), ("Video", String::new())]
         );
-        let v = video_entries("file:///v.mp4", "fit", false, "fullscreen");
+        let normal = PlaybackSettings::default();
+        let v = video_entries("file:///v.mp4", "fit", false, "fullscreen", &normal);
         assert_eq!(v[0], ("Mode", "fit".into()));
         assert_eq!(v[1], ("Paused", String::new()));
         assert_eq!(v[2], ("PauseWhen", "fullscreen".into()));
-        assert_eq!(v[3], ("Video", "file:///v.mp4".into()));
-        assert_eq!(v[4], ("Image", String::new()));
+        assert_eq!(v[3], ("Speed", "1".into()));
+        assert_eq!(v[4], ("Brightness", "0".into()));
+        assert_eq!(v[5], ("Video", "file:///v.mp4".into()));
+        assert_eq!(v[6], ("Image", String::new()));
         assert_eq!(
-            video_entries("file:///v.mp4", "fill", true, "")[1],
+            video_entries("file:///v.mp4", "fill", true, "", &normal)[1],
             ("Paused", "true".into())
+        );
+        let other = PlaybackSettings {
+            speed: 1.5,
+            brightness: -40,
+            fps_limit: 30,
+        };
+        assert_eq!(
+            playback_entries(&other),
+            vec![("Speed", "1.5".into()), ("Brightness", "-0.4".into())]
         );
         assert_eq!(pause_when(true, false), "fullscreen");
         assert_eq!(pause_when(true, true), "fullscreen maximized");

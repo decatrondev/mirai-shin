@@ -29,6 +29,14 @@
     <entry name="PauseWhen" type="String">
       <default></default>
     </entry>
+    <!-- Speed: velocidad del video ("1" = normal; fase 3.5). -->
+    <entry name="Speed" type="String">
+      <default>1</default>
+    </entry>
+    <!-- Brightness: de "-1" (negro) a "1" (blanco), "0" = normal (fase 3.5). -->
+    <entry name="Brightness" type="String">
+      <default>0</default>
+    </entry>
     <!-- Covered: lo escribe el complemento: por qué ventana está en pausa ("fullscreen", "maximized" o vacío). -->
     <entry name="Covered" type="String">
       <default></default>

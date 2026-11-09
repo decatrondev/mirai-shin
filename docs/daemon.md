@@ -28,6 +28,9 @@ A console tool to talk to the daemon, shipped with the app for diagnostics and s
 | `clear [--monitor <name>]` | Removes the wallpaper. With `--monitor`, that monitor stays without one even if there is one for all |
 | `pause [--monitor <name>]` | Pauses the video wallpaper (the last frame stays on screen) until `resume` or until the daemon restarts. Images do not change. `outputs` shows `paused: by you` |
 | `resume [--monitor <name>]` | Plays again what `pause` stopped. Resuming one monitor while all were paused leaves the others paused |
+| `speed <n>` | Video speed on every monitor, from 0.25 to 4 (`1` = normal; `1.5` or `1,5`). Saved in the settings |
+| `brightness <n>` | Video brightness on every monitor, from -100 (black) to 100 (white); `0` = normal. Saved in the settings |
+| `fps <n>` | At most that many frames per second on every monitor, from 1 to 240; `fps off` removes the limit. Saved in the settings |
 | `ping` | Checks that the daemon answers |
 | `shutdown` | Stops the daemon |
 
@@ -73,9 +76,14 @@ pause_on_maximized = true                 # … when a window is maximized on th
 pause_on_battery = true                   # … when the computer runs on battery
 pause_on_lock = true                      # … when the session is locked
 pause_on_screen_off = true                # … when that monitor's screen is off
+speed = 1                                 # video speed, 0.25 to 4
+brightness = 0                            # video brightness, -100 (black) to 100 (white)
+fps_limit = 0                             # frames per second at most, up to 240; 0 = no limit
 ```
 
 The `pause_on_*` keys are read now but act only as each signal arrives. **Battery** works on Linux: the daemon asks UPower (the Flatpak has permission to talk to it) and pauses the videos as soon as the charger is unplugged, and plays them again when it is plugged back in; `outputs` shows `paused: on battery`. A pause made with `pause` wins: plugging in does not undo it. If the system has no UPower, `status` says the power source is unknown and videos are not paused on battery. **Full screen** works on KDE Plasma, Sway and Hyprland, and pauses only the monitor where the window is (a maximized window does the same, unless `pause_on_maximized = false`; a normal window on top does not pause). On KDE the wallpaper add-on sees the windows of its screen, on the virtual desktop and activity being shown, and pauses by itself; minimized windows do not count. On Sway and Hyprland the daemon reads the window list (`wlr-foreign-toplevel`): a full-screen window pauses its monitor while it is the active window, or while the active window is on another monitor (a game on one monitor stays paused when you click on the other); a full-screen window left on a hidden workspace does not pause anything. If you switch to an empty workspace, the video plays again. `outputs` shows `paused: app in full screen`. **Lock** works on Linux through logind (the Flatpak has permission to talk to it): locking the session pauses the videos on every monitor and unlocking plays them again; `outputs` shows `paused: screen locked` and `status` says whether locking is detected. KDE Plasma and GNOME tell logind when they lock; swaylock does not do it by itself, so on Sway locking may not be detected. **Screen off** works on KDE Plasma (`org_kde_kwin_dpms`), Sway and Hyprland (`wlr-output-power-management`) and pauses only the monitor that is off. **Before the computer sleeps** every video is paused, and they play again on wake (`paused: computer asleep`); this has no setting. On Windows all of this comes in step 3.6.
+
+**Speed, brightness and frame limit** apply to every video at once, and `status` shows them. On Sway and Hyprland mpv does all three: the limit drops the extra frames before drawing (a 24 fps video with a limit of 30 stays at 24), and a lower limit uses less CPU (measured with a 60 fps video: 30 frames used about 20 % less, 15 frames about half). On KDE Plasma speed and brightness are applied by the wallpaper add-on (brightness is a black or white layer over the video, not drawn when it is 0). Plasma's player cannot limit frames, so the daemon makes a copy of the video at that rate once per wallpaper (the same mechanism as compatible copies; meanwhile the previous video keeps playing, and `outputs` shows `copy at 30 frames per second`). A video that already has no more frames than the limit plays as it is. If the copy cannot be made, the video plays without the limit. On Windows they come in step 3.6.
 
 Every key is optional. An invalid value uses its default and is noted in the log. Keys this version does not know are kept when the settings are saved. `RUST_LOG` overrides `log_level` for debugging.
 

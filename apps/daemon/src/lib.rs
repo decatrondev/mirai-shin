@@ -8,10 +8,12 @@ pub mod session;
 use chrono::Utc;
 use display::{Display, SurfaceFactory};
 use miraishin_core::fit::FitMode;
+use miraishin_core::playback::{self, PlaybackSettings};
 use miraishin_ipc::{
     codes, events, methods, serve, BindError, Endpoint, Event, Handler, HandlerFuture, HelloParams,
-    HelloResult, LibraryItem, LibraryList, Listener, PlaybackParams, RescanResult, RpcError,
-    StatusResult, WallpaperClearParams, WallpaperSetParams, PROTOCOL_VERSION,
+    HelloResult, LibraryItem, LibraryList, Listener, PlaybackInfo, PlaybackParams,
+    PlaybackSetParams, RescanResult, RpcError, StatusResult, WallpaperClearParams,
+    WallpaperSetParams, PROTOCOL_VERSION,
 };
 use miraishin_license::LicenseProvider;
 use miraishin_store::library::StoreError;
@@ -39,6 +41,7 @@ pub const METHODS: &[&str] = &[
     methods::WALLPAPER_CLEAR,
     methods::PLAYBACK_PAUSE,
     methods::PLAYBACK_RESUME,
+    methods::PLAYBACK_SET,
 ];
 
 pub struct RunConfig {
@@ -171,6 +174,7 @@ pub async fn run(config: RunConfig) -> Result<(), RunError> {
             }
         },
         settings.pause,
+        settings.playback,
     );
     let (surface_name, surface_ok) = screen.surface();
     tracing::info!(
@@ -219,6 +223,8 @@ pub async fn run(config: RunConfig) -> Result<(), RunError> {
         display: screen.clone(),
         power,
         lock,
+        playback: Mutex::new(settings.playback),
+        settings_file: config.paths.settings_file(),
         wallpapers_dir,
         started: Instant::now(),
         license: Box::new(miraishin_license::NotRequired),
@@ -273,6 +279,9 @@ struct Daemon {
     display: Display,
     power: Arc<Mutex<PowerState>>,
     lock: Arc<Mutex<LockState>>,
+    /// Velocidad, brillo y límite de cuadros que valen ahora (fase 3.5).
+    playback: Mutex<PlaybackSettings>,
+    settings_file: PathBuf,
     wallpapers_dir: PathBuf,
     started: Instant,
     license: Box<dyn LicenseProvider>,
@@ -338,7 +347,59 @@ impl Daemon {
                 .unwrap_or_else(|p| p.into_inner())
                 .as_str()
                 .to_string(),
+            playback: Some(self.playback_info(false)),
         })
+    }
+
+    fn playback_info(&self, not_saved: bool) -> PlaybackInfo {
+        let p = *self.playback.lock().unwrap_or_else(|p| p.into_inner());
+        let (supported, fps_by_copy) = self.display.playback_support();
+        PlaybackInfo {
+            speed: p.speed,
+            brightness: p.brightness,
+            fps_limit: p.fps_limit,
+            fps_by_copy,
+            supported,
+            not_saved,
+        }
+    }
+
+    /// Cambia velocidad, brillo o límite de cuadros (lo que venga), lo guarda en los ajustes
+    /// y lo aplica. Un valor fuera de rango no cambia nada.
+    async fn set_playback(&self, p: PlaybackSetParams) -> Result<Value, RpcError> {
+        let range = || RpcError::new(codes::OUT_OF_RANGE);
+        let mut new = *self.playback.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(v) = p.speed {
+            new.speed = playback::check_speed(v).ok_or_else(range)?;
+        }
+        if let Some(v) = p.brightness {
+            new.brightness = playback::check_brightness(v).ok_or_else(range)?;
+        }
+        if let Some(v) = p.fps_limit {
+            new.fps_limit = playback::check_fps_limit(v).ok_or_else(range)?;
+        }
+        *self.playback.lock().unwrap_or_else(|p| p.into_inner()) = new;
+        let saved = self.save_playback(new);
+        self.display.set_playback(new).await;
+        to_value(self.playback_info(!saved))
+    }
+
+    /// Guarda en `settings.toml` sin tocar lo demás. Si el archivo está roto no se pisa
+    /// (se perdería lo que la persona escribió): vale hasta reiniciar.
+    fn save_playback(&self, p: PlaybackSettings) -> bool {
+        let (mut settings, warnings) = Settings::load(&self.settings_file);
+        if warnings.contains(&miraishin_store::SettingsWarning::UnreadableFile) {
+            tracing::warn!("settings file is unreadable; playback settings not saved");
+            return false;
+        }
+        settings.playback = p;
+        match settings.save(&self.settings_file) {
+            Ok(()) => true,
+            Err(e) => {
+                tracing::warn!(error = %e, "could not save the playback settings");
+                false
+            }
+        }
     }
 
     async fn set_wallpaper(&self, p: WallpaperSetParams) -> Result<Value, RpcError> {
@@ -498,6 +559,7 @@ impl Handler for Daemon {
                 }
                 methods::PLAYBACK_PAUSE => self.playback(params, true).await,
                 methods::PLAYBACK_RESUME => self.playback(params, false).await,
+                methods::PLAYBACK_SET => self.set_playback(parse(params)?).await,
                 methods::SHUTDOWN => {
                     self.shutdown.notify_one();
                     Ok(json!({ "stopping": true }))

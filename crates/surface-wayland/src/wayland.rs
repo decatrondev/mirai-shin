@@ -10,6 +10,7 @@ use std::time::Duration;
 use khronos_egl as egl_api;
 use miraishin_core::fit::FitMode;
 use miraishin_core::pause::{self, Cover, Window};
+use miraishin_core::playback::PlaybackSettings;
 use miraishin_core::surface::{
     check_frame, EventSink, Frame, OutputInfo, Size, Surface, SurfaceError, SurfaceEvent,
 };
@@ -102,6 +103,7 @@ enum Command {
     ShowVideo(String, PathBuf, FitMode, VideoReply),
     Clear(String),
     SetPaused(String, bool),
+    SetPlayback(PlaybackSettings),
     Shutdown,
 }
 
@@ -228,6 +230,10 @@ impl Surface for WaylandSurface {
         self.output(output)?;
         self.send(Command::SetPaused(output.to_string(), paused))
     }
+
+    fn set_playback(&mut self, playback: &PlaybackSettings) -> Result<(), SurfaceError> {
+        self.send(Command::SetPlayback(*playback))
+    }
 }
 
 impl Drop for WaylandSurface {
@@ -350,6 +356,8 @@ struct State {
     /// EGL se prepara al primer video: `None` = sin intentar, `Some(None)` = no hay.
     egl: Option<Option<Egl>>,
     players: HashMap<VideoKey, Slot>,
+    /// Velocidad, brillo y límite de cuadros de todos los videos (fase 3.5).
+    playback: PlaybackSettings,
     /// libmpv avisa por aquí (desde sus hilos) que hay eventos o un cuadro nuevo.
     ping: Ping,
     // ---- Ventanas (fase 3.3, `wlr-foreign-toplevel`; Sway y Hyprland)
@@ -470,6 +478,7 @@ fn run(
         wl_display,
         egl: None,
         players: HashMap::new(),
+        playback: PlaybackSettings::default(),
         ping,
         _toplevels: toplevel_manager,
         windows: HashMap::new(),
@@ -502,6 +511,7 @@ fn run(
         }
         ChannelEvent::Msg(Command::Clear(name)) => state.clear(&name),
         ChannelEvent::Msg(Command::SetPaused(name, paused)) => state.set_paused(&name, paused),
+        ChannelEvent::Msg(Command::SetPlayback(p)) => state.set_playback(p),
         ChannelEvent::Msg(Command::Shutdown) | ChannelEvent::Closed => state.exit = true,
     });
     if inserted.is_err() {
@@ -829,6 +839,9 @@ impl State {
             drop(player);
             return fail(e.as_str());
         }
+        if !self.playback.is_default() && !player.set_playback(&self.playback) {
+            tracing::warn!("video: mpv did not take every playback setting");
+        }
         Ok(Slot {
             player,
             context,
@@ -898,6 +911,34 @@ impl State {
         if !paused {
             self.render_output(i);
         }
+    }
+
+    /// Velocidad, brillo y límite para todos los reproductores, y los que vengan.
+    fn set_playback(&mut self, p: PlaybackSettings) {
+        if self.playback == p {
+            return;
+        }
+        self.playback = p;
+        for slot in self.players.values() {
+            if !slot.player.set_playback(&p) {
+                tracing::warn!("video: mpv did not take every playback setting");
+            }
+        }
+        // Un video en pausa no se vuelve a dibujar: se deja pasar un cuadro más, para que el
+        // brillo nuevo se vea en el cuadro quieto (mpv lo vuelve a dibujar y avisa).
+        for o in &mut self.outputs {
+            if let Some(v) = o.background.as_mut().and_then(|b| b.video.as_mut()) {
+                if v.paused {
+                    v.drawn = false;
+                }
+            }
+        }
+        tracing::info!(
+            speed = p.speed,
+            brightness = p.brightness,
+            fps_limit = p.fps_limit,
+            "video playback settings"
+        );
     }
 
     /// libmpv avisó: eventos y cuadros nuevos.

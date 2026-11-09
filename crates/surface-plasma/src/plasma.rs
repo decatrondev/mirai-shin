@@ -8,6 +8,7 @@ use image::codecs::png::{CompressionType, FilterType, PngEncoder};
 use image::{ExtendedColorType, ImageEncoder};
 use miraishin_core::fit::FitMode;
 use miraishin_core::pause::{PauseReason, PauseSettings};
+use miraishin_core::playback::PlaybackSettings;
 use miraishin_core::surface::{check_frame, EventSink, Frame, OutputInfo, Surface, SurfaceError};
 use miraishin_surface_wayland::OutputWatcher;
 use zbus::blocking::Connection;
@@ -31,6 +32,8 @@ pub struct PlasmaSurface {
     paused: HashSet<String>,
     /// Valor de `PauseWhen` (fase 3.3): el complemento pausa solo con esas ventanas encima.
     pause_when: String,
+    /// Velocidad y brillo (fase 3.5); el límite de cuadros lo hace el daemon con una copia.
+    playback: PlaybackSettings,
     counter: u64,
 }
 
@@ -69,6 +72,7 @@ impl PlasmaSurface {
                 let d = PauseSettings::default();
                 script::pause_when(d.on_fullscreen, d.on_maximized)
             },
+            playback: PlaybackSettings::default(),
             counter: 0,
         };
         surface.forget_old_frames();
@@ -177,6 +181,7 @@ impl Surface for PlasmaSurface {
             mode.as_str(),
             self.paused.contains(output),
             &self.pause_when,
+            &self.playback,
         );
         self.put(output, &entries)?;
         self.videos.insert(output.to_string());
@@ -226,6 +231,30 @@ impl Surface for PlasmaSurface {
                 Err(SurfaceError::UnknownOutput)
             }
         }
+    }
+
+    /// Velocidad y brillo en todos los monitores con video (el complemento los aplica al
+    /// reproductor y al efecto de brillo). Los videos que se pongan después los traen.
+    fn set_playback(&mut self, playback: &PlaybackSettings) -> Result<(), SurfaceError> {
+        self.playback = *playback;
+        let entries = script::playback_entries(playback);
+        let entries: Vec<(&str, &str)> = entries.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let mut videos: Vec<&String> = self.videos.iter().collect();
+        videos.sort();
+        for output in videos {
+            let reply = eval(
+                &self.dbus,
+                &script::write(output, &entries, package::plugin_id()),
+            );
+            if reply.as_deref().map(str::trim) != Ok("ok:") {
+                tracing::warn!(output = %output, reply = ?reply, "plasma did not take the playback settings");
+            }
+        }
+        Ok(())
+    }
+
+    fn fps_limit_by_copy(&self) -> bool {
+        true
     }
 
     fn set_window_rules(&mut self, settings: &PauseSettings) {

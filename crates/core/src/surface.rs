@@ -180,6 +180,8 @@ pub enum SurfaceError {
     Video(&'static str),
     /// Esta superficie todavía no sabe pausar un video (fase 3): se sigue reproduciendo.
     PauseUnsupported,
+    /// Esta superficie todavía no sabe cambiar velocidad, brillo ni límite (fase 3.5).
+    PlaybackUnsupported,
 }
 
 impl SurfaceError {
@@ -192,6 +194,7 @@ impl SurfaceError {
             Self::VideoUnsupported => "video_unsupported",
             Self::Video(code) => code,
             Self::PauseUnsupported => "pause_unsupported",
+            Self::PlaybackUnsupported => "playback_unsupported",
         }
     }
 }
@@ -248,6 +251,24 @@ pub trait Surface: Send {
     /// una vez al empezar. Las demás no hacen nada: avisan con `SurfaceEvent::Covered`.
     fn set_window_rules(&mut self, settings: &crate::pause::PauseSettings) {
         let _ = settings;
+    }
+
+    /// Velocidad, brillo y límite de cuadros de los videos (fase 3.5), para todos los
+    /// monitores, los de ahora y los que se pongan después. Se llama al empezar y cada vez que
+    /// cambian. Si `fps_limit_by_copy` es `true`, la superficie no hace el límite (lo hace el
+    /// daemon con una copia del video). Las que no saben responden `PlaybackUnsupported`.
+    fn set_playback(
+        &mut self,
+        playback: &crate::playback::PlaybackSettings,
+    ) -> Result<(), SurfaceError> {
+        let _ = playback;
+        Err(SurfaceError::PlaybackUnsupported)
+    }
+
+    /// `true` si esta superficie no sabe limitar los cuadros y el daemon tiene que hacer una
+    /// copia del video a ese ritmo (KDE: el reproductor de Plasma no lo trae).
+    fn fps_limit_by_copy(&self) -> bool {
+        false
     }
 
     /// Si el video de `output` está en pausa porque la superficie lo decidió sola (una

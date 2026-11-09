@@ -1,6 +1,7 @@
 //! Fondos por monitor con una superficie falsa en memoria (sin pantalla ni Wayland).
 
 use miraishin_core::fit::FitMode;
+use miraishin_core::playback::PlaybackSettings;
 use miraishin_core::surface::{
     check_frame, EventSink, Frame, OutputInfo, Scale, Size, Surface, SurfaceError, SurfaceEvent,
 };
@@ -30,6 +31,11 @@ struct Screen {
     /// Lo que la superficie pausa sola (KDE, fase 3.3) y los ajustes que recibió.
     window_pauses: HashMap<String, miraishin_core::pause::PauseReason>,
     window_rules: Option<miraishin_core::pause::PauseSettings>,
+    /// Sabe velocidad, brillo y límite (fase 3.5), lo último que recibió, y si el límite lo
+    /// tiene que hacer el daemon con una copia (como KDE).
+    knows_playback: bool,
+    playback: Option<PlaybackSettings>,
+    fps_by_copy: bool,
     sink: Option<EventSink>,
 }
 
@@ -94,6 +100,17 @@ impl Surface for FakeSurface {
     }
     fn window_pause(&self, output: &str) -> Option<miraishin_core::pause::PauseReason> {
         self.0.lock().unwrap().window_pauses.get(output).copied()
+    }
+    fn set_playback(&mut self, playback: &PlaybackSettings) -> Result<(), SurfaceError> {
+        let mut s = self.0.lock().unwrap();
+        if !s.knows_playback {
+            return Err(SurfaceError::PlaybackUnsupported);
+        }
+        s.playback = Some(*playback);
+        Ok(())
+    }
+    fn fps_limit_by_copy(&self) -> bool {
+        self.0.lock().unwrap().fps_by_copy
     }
     fn clear(&mut self, output: &str) -> Result<(), SurfaceError> {
         let mut s = self.0.lock().unwrap();
@@ -1075,5 +1092,172 @@ async fn pausa_por_ventanas() {
     let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
     assert_eq!(paused(&list, "HDMI-A-1"), json!("fullscreen"));
     assert_eq!(paused(&list, "DP-1"), Value::Null);
+    stop(c, task).await;
+}
+
+fn playback_of(screen: &Shared) -> Option<PlaybackSettings> {
+    screen.lock().unwrap().playback
+}
+
+/// Velocidad, brillo y límite de cuadros (fase 3.5).
+#[cfg(unix)]
+#[tokio::test]
+async fn velocidad_brillo_y_cuadros() {
+    let t = tempfile::tempdir().unwrap();
+    let paths = Paths::under(t.path());
+    let ep = endpoint(t.path());
+    let wall = paths.default_wallpapers_dir();
+    video_wallpaper(&wall, "olas");
+    let original = wall.join("olas/v.mp4").to_string_lossy().into_owned();
+    let env = |ffmpeg| miraishin_daemon::VideoEnv {
+        no_real_gpu: false,
+        ffmpeg: Some(ffmpeg),
+        check_delays: Vec::new(),
+    };
+    let new_screen = |by_copy: bool, knows: bool| -> Shared {
+        Arc::new(Mutex::new(Screen {
+            outputs: vec![out("DP-1", 10, 10, 120)],
+            plays_video: true,
+            knows_playback: knows,
+            fps_by_copy: by_copy,
+            ..Screen::default()
+        }))
+    };
+
+    // 1. Como Sway: la superficie hace todo, el límite incluido (sin copia).
+    let screen = new_screen(false, true);
+    let task = start_with(&paths, &ep, &screen, env(fake_ffmpeg(t.path(), false)));
+    let mut c = connect(&ep).await;
+    assert_eq!(playback_of(&screen), Some(PlaybackSettings::default()));
+    let st = c.call(methods::STATUS, Value::Null).await.unwrap();
+    assert_eq!(
+        st["playback"],
+        json!({"speed": 1.0, "brightness": 0, "fps_limit": 0, "fps_by_copy": false,
+               "supported": true, "not_saved": false})
+    );
+    c.call(methods::WALLPAPER_SET, json!({"folder": "olas"}))
+        .await
+        .unwrap();
+    let r = c
+        .call(methods::PLAYBACK_SET, json!({"speed": 1.5}))
+        .await
+        .unwrap();
+    assert_eq!(
+        (r["speed"].clone(), r["supported"].clone()),
+        (json!(1.5), json!(true))
+    );
+    c.call(
+        methods::PLAYBACK_SET,
+        json!({"brightness": -30, "fps_limit": 30}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        playback_of(&screen),
+        Some(PlaybackSettings {
+            speed: 1.5,
+            brightness: -30,
+            fps_limit: 30
+        })
+    );
+    assert_eq!(playing(&screen, "DP-1").as_deref(), Some(original.as_str()));
+    assert_eq!(
+        screen.lock().unwrap().history.len(),
+        1,
+        "sin volver a ponerlo"
+    );
+    // Fuera de rango: error y no cambia nada.
+    for bad in [
+        json!({"brightness": 101}),
+        json!({"speed": 0.1}),
+        json!({"fps_limit": 241}),
+        json!({"speed": 2, "fps_limit": -1}),
+    ] {
+        assert_eq!(
+            code(c.call(methods::PLAYBACK_SET, bad).await),
+            codes::OUT_OF_RANGE
+        );
+    }
+    assert_eq!(playback_of(&screen).unwrap().speed, 1.5);
+    let text = std::fs::read_to_string(paths.settings_file()).unwrap();
+    assert!(
+        text.contains("speed = 1.5")
+            && text.contains("brightness = -30")
+            && text.contains("fps_limit = 30"),
+        "{text}"
+    );
+    stop(c, task).await;
+
+    // 2. Al volver a arrancar, la superficie recibe lo guardado.
+    let screen = new_screen(false, true);
+    let task = start_with(&paths, &ep, &screen, env(fake_ffmpeg(t.path(), false)));
+    let mut c = connect(&ep).await;
+    assert_eq!(playback_of(&screen).unwrap().fps_limit, 30);
+    c.call(
+        methods::PLAYBACK_SET,
+        json!({"speed": 1, "brightness": 0, "fps_limit": 0}),
+    )
+    .await
+    .unwrap();
+    stop(c, task).await;
+
+    // 3. Como KDE: el límite va con una copia. El video es de 30 cuadros (ffmpeg falso).
+    let screen = new_screen(true, true);
+    let task = start_with(&paths, &ep, &screen, env(fake_ffmpeg(t.path(), false)));
+    let mut c = connect(&ep).await;
+    wait_for(|| playing(&screen, "DP-1").as_deref() == Some(original.as_str())).await;
+    // Límite 30 con un video de 30: no hace falta copia.
+    let r = c
+        .call(methods::PLAYBACK_SET, json!({"fps_limit": 30}))
+        .await
+        .unwrap();
+    assert_eq!(r["fps_by_copy"], json!(true));
+    assert_eq!(playing(&screen, "DP-1").as_deref(), Some(original.as_str()));
+    // Límite 24: copia del tamaño de la pantalla (10×10 px) a 24 cuadros.
+    c.call(methods::PLAYBACK_SET, json!({"fps_limit": 24}))
+        .await
+        .unwrap();
+    wait_for(|| playing(&screen, "DP-1").is_some_and(|p| p.contains("/10x10-24-"))).await;
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(list["items"][0]["fps_copy"], json!(24));
+    // La superficie no recibe el límite como algo que deba hacer ella, pero sí lo demás.
+    assert_eq!(playback_of(&screen).unwrap().fps_limit, 24);
+    // Sin límite: vuelve el original.
+    c.call(methods::PLAYBACK_SET, json!({"fps_limit": 0}))
+        .await
+        .unwrap();
+    wait_for(|| playing(&screen, "DP-1").as_deref() == Some(original.as_str())).await;
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(list["items"][0]["fps_copy"], Value::Null);
+    stop(c, task).await;
+
+    // 4. Como KDE, pero la copia falla: sigue el original sin límite (no el color de respaldo).
+    std::fs::remove_dir_all(paths.video_copies_dir()).ok();
+    let screen = new_screen(true, true);
+    let task = start_with(&paths, &ep, &screen, env(fake_ffmpeg(t.path(), true)));
+    let mut c = connect(&ep).await;
+    wait_for(|| playing(&screen, "DP-1").is_some()).await;
+    c.call(methods::PLAYBACK_SET, json!({"fps_limit": 15}))
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(playing(&screen, "DP-1").as_deref(), Some(original.as_str()));
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(list["items"][0]["problem"], Value::Null);
+    assert_eq!(list["items"][0]["fps_copy"], Value::Null);
+    stop(c, task).await;
+
+    // 5. Una superficie que no sabe: se guarda igual y se avisa.
+    let screen = new_screen(false, false);
+    let task = start_with(&paths, &ep, &screen, env(fake_ffmpeg(t.path(), false)));
+    let mut c = connect(&ep).await;
+    let r = c
+        .call(methods::PLAYBACK_SET, json!({"speed": 2}))
+        .await
+        .unwrap();
+    assert_eq!(r["supported"], json!(false));
+    assert!(std::fs::read_to_string(paths.settings_file())
+        .unwrap()
+        .contains("speed = 2"));
     stop(c, task).await;
 }

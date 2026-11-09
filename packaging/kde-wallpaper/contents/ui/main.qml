@@ -9,6 +9,9 @@
 // - `PauseWhen`: con qué ventanas encima se pausa solo, sin esperar al daemon (fase 3.3):
 //   "fullscreen", "maximized", las dos separadas por espacio, o vacío. Las ventanas las mira
 //   Windows.qml.
+// - `Speed`: velocidad del video, "1" = normal (fase 3.5).
+// - `Brightness`: de "-1" (negro) a "1" (blanco), "0" = normal (fase 3.5). Se hace con una
+//   capa negra o blanca encima del video, que no se dibuja cuando vale 0.
 // Y deja escrito para el daemon (lo lee por D-Bus):
 // - `Status`: estado del video: "" (sin video), `loading`, `playing`, o el código del problema
 //   (`video_no_decoder`, `video_unreadable`, `video_unplayable`, `video_no_frames`,
@@ -28,6 +31,8 @@ WallpaperItem {
     readonly property string wantedVideo: root.configuration.Video || ""
     readonly property string mode: root.configuration.Mode || "fill"
     readonly property var pauseWhen: (root.configuration.PauseWhen || "").split(" ")
+    readonly property real speed: Math.min(4, Math.max(0.25, Number(root.configuration.Speed) || 1))
+    readonly property real brightness: Math.min(1, Math.max(-1, Number(root.configuration.Brightness) || 0))
 
     // ---- Ventanas encima (fase 3.3) ----
     readonly property rect screenRect: Qt.rect(Screen.virtualX, Screen.virtualY, Screen.width, Screen.height)
@@ -260,6 +265,14 @@ WallpaperItem {
                     : VideoOutput.Stretch
             }
 
+            // Brillo: capa negra (oscurece) o blanca (aclara) sobre el video.
+            Rectangle {
+                anchors.fill: output
+                visible: root.brightness !== 0
+                color: root.brightness < 0 ? "black" : "white"
+                opacity: Math.abs(root.brightness)
+            }
+
             // Cada cuadro que de verdad llega a la pantalla.
             Connections {
                 target: output.videoSink
@@ -304,7 +317,9 @@ WallpaperItem {
                         slot.savedFps = got;
                         root.save("Fps", got.toFixed(1) + "/" + slot.videoFps.toFixed(1));
                     }
-                    if (slot.videoFps > 0 && got < slot.videoFps * 0.8 && got < 24) {
+                    // Con otra velocidad llegan más o menos cuadros que los del video.
+                    const expected = slot.videoFps * root.speed;
+                    if (expected > 0 && got < expected * 0.8 && got < 24) {
                         slot.slowWindows++;
                         if (slot.slowWindows === 2 && root.current === slot)
                             root.setStatus("video_too_slow");
@@ -321,6 +336,7 @@ WallpaperItem {
                 id: player
                 loops: MediaPlayer.Infinite
                 videoOutput: output
+                playbackRate: root.speed
                 onMetaDataChanged: {
                     const r = metaData.value(MediaMetaData.Resolution);
                     if (r && r.width > 0)

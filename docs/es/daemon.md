@@ -28,6 +28,9 @@ Herramienta de consola para hablar con el daemon. Se entrega con la app, para di
 | `clear [--monitor <nombre>]` | Quita el fondo. Con `--monitor`, ese monitor queda sin fondo aunque haya uno para todos |
 | `pause [--monitor <nombre>]` | Pausa el video de fondo (queda el último cuadro en pantalla) hasta `resume` o hasta reiniciar el daemon. Las imágenes no cambian. `outputs` muestra `en pausa: a mano` |
 | `resume [--monitor <nombre>]` | Vuelve a reproducir lo que pausó `pause`. Reanudar un monitor cuando estaban todos en pausa deja en pausa a los demás |
+| `speed <n>` | Velocidad del video en todos los monitores, de 0,25 a 4 (`1` = normal; vale `1.5` o `1,5`). Se guarda en los ajustes |
+| `brightness <n>` | Brillo del video en todos los monitores, de -100 (negro) a 100 (blanco); `0` = normal. Se guarda en los ajustes |
+| `fps <n>` | Como mucho esa cantidad de cuadros por segundo en todos los monitores, de 1 a 240; `fps off` quita el límite. Se guarda en los ajustes |
 | `ping` | Comprueba que el daemon responde |
 | `shutdown` | Apaga el daemon |
 
@@ -73,9 +76,14 @@ pause_on_maximized = true             # … con una ventana maximizada en ese mo
 pause_on_battery = true               # … con el equipo funcionando con batería
 pause_on_lock = true                  # … con la sesión bloqueada
 pause_on_screen_off = true            # … con la pantalla de ese monitor apagada
+speed = 1                             # velocidad del video, de 0,25 a 4
+brightness = 0                        # brillo del video, de -100 (negro) a 100 (blanco)
+fps_limit = 0                         # cuadros por segundo como mucho, hasta 240; 0 = sin límite
 ```
 
 Las claves `pause_on_*` ya se leen, pero cada una actúa recién cuando llega su señal. **La batería** ya funciona en Linux: el daemon le pregunta a UPower (el Flatpak tiene permiso para hablarle) y pausa los videos apenas se desenchufa el cargador; al volver a enchufarlo, siguen. `outputs` muestra «en pausa: con batería». Una pausa hecha con `pause` manda: enchufar no la quita. Si el sistema no tiene UPower, `status` dice que no se sabe la energía y los videos no se pausan por batería. **La pantalla completa** funciona en KDE Plasma, Sway y Hyprland, y pausa solo el monitor donde está la ventana (una ventana maximizada hace lo mismo, salvo con `pause_on_maximized = false`; una ventana normal encima no pausa). En KDE el complemento de fondo ve las ventanas de su pantalla, del escritorio virtual y de la actividad que se ven, y pausa solo; las minimizadas no cuentan. En Sway y Hyprland el daemon lee la lista de ventanas (`wlr-foreign-toplevel`): una ventana en pantalla completa pausa su monitor mientras es la activa, o mientras la activa está en otro monitor (un juego en un monitor sigue en pausa aunque hagas clic en el otro); una ventana en pantalla completa que quedó en un escritorio oculto no pausa nada. Si pasas a un escritorio vacío, el video vuelve a moverse. `outputs` muestra «en pausa: app en pantalla completa». **El bloqueo** funciona en Linux con logind (el Flatpak tiene permiso para hablarle): al bloquear la sesión se pausan los videos de todos los monitores y al desbloquear siguen; `outputs` muestra «en pausa: pantalla bloqueada» y `status` dice si el bloqueo se detecta. KDE Plasma y GNOME avisan a logind al bloquear; swaylock no lo hace solo, así que en Sway el bloqueo puede no llegar. **La pantalla apagada** funciona en KDE Plasma (`org_kde_kwin_dpms`), Sway y Hyprland (`wlr-output-power-management`) y pausa solo el monitor apagado. **Antes de suspender** el equipo se pausan todos los videos y siguen al despertar («en pausa: equipo suspendido»); esto no tiene ajuste. En Windows todo esto llega en el paso 3.6.
+
+**La velocidad, el brillo y el límite de cuadros** valen para todos los videos a la vez, y `status` los muestra. En Sway y Hyprland los hace mpv: el límite descarta los cuadros de más antes de dibujarlos (un video de 24 cuadros con límite 30 queda en 24), y un límite más bajo gasta menos CPU (medido con un video de 60 cuadros: con 30 gastó cerca de un 20 % menos; con 15, cerca de la mitad). En KDE Plasma la velocidad y el brillo los aplica el complemento de fondo (el brillo es una capa negra o blanca sobre el video, que no se dibuja cuando vale 0). El reproductor de Plasma no sabe limitar los cuadros, así que el daemon hace una vez por fondo una copia del video a ese ritmo (el mismo mecanismo de las copias compatibles; mientras tanto sigue el video de antes, y `outputs` muestra «copia a 30 cuadros por segundo»). Un video que no pasa del límite se reproduce tal cual. Si la copia no se puede hacer, el video sigue sin límite. En Windows llegan en el paso 3.6.
 
 Todas las claves son opcionales. Un valor no válido usa su valor por defecto y se anota en el log. Las claves que esta versión no conoce se conservan al guardar. `RUST_LOG` pisa `log_level` para depurar.
 

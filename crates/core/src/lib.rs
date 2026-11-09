@@ -4,4 +4,5 @@ pub mod copies;
 pub mod fit;
 pub mod manifest;
 pub mod pause;
+pub mod playback;
 pub mod surface;
