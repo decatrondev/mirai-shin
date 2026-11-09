@@ -1095,6 +1095,7 @@ async fn pausa_por_ventanas() {
     stop(c, task).await;
 }
 
+#[cfg(unix)]
 fn playback_of(screen: &Shared) -> Option<PlaybackSettings> {
     screen.lock().unwrap().playback
 }
