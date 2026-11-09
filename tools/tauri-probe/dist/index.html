@@ -1,0 +1,45 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<style>
+  :root { --bg:#15171a; --panel:#1d2024; --line:#2a2e33; --fg:#e8e8e8; --dim:#9aa0a6; --accent:#2fd6a5; }
+  * { box-sizing:border-box }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:15px system-ui,sans-serif; user-select:none }
+  .bar { height:36px; display:flex; align-items:center; background:var(--panel); border-bottom:1px solid var(--line) }
+  .bar .t { flex:1; padding-left:12px; height:100%; display:flex; align-items:center; color:var(--dim) }
+  .bar button { width:46px; height:100%; border:0; background:none; color:var(--fg); font-size:15px; cursor:pointer }
+  .bar button:hover { background:var(--line) } .bar button.x:hover { background:#c42b1c }
+  main { padding:28px; display:grid; gap:10px; max-width:720px }
+  .row { display:flex; gap:12px } .k { width:180px; color:var(--dim) } .ok { color:var(--accent) }
+</style></head>
+<body>
+  <div class="bar"><div class="t" data-tauri-drag-region>Tauri probe — arrastra desde aquí</div>
+    <button id="min" title="Minimizar">&#x2013;</button><button id="max" title="Maximizar">&#x25A1;</button><button id="close" class="x" title="Cerrar">&#x2715;</button></div>
+  <main>
+    <div class="row"><span class="k">Motor</span><span id="engine"></span></div>
+    <div class="row"><span class="k">Ventana (CSS px)</span><span id="size"></span></div>
+    <div class="row"><span class="k">Escala</span><span id="dpr"></span></div>
+    <div class="row"><span class="k">Puente con Rust</span><span id="ipc"></span></div>
+  </main>
+<script>
+  window.onerror = (m, src, l) => { document.querySelector("main").insertAdjacentHTML("beforeend", "<div class=row><span class=k>Error</span><span>" + m + " (" + l + ")</span></div>"); };
+</script>
+<script>
+(() => {
+  const ua = navigator.userAgent;
+  document.getElementById("engine").textContent = (ua.match(/Edg\/[\d.]+/) || ua.match(/AppleWebKit\/[\d.]+/) || [ua])[0];
+  const upd = () => {
+    document.getElementById("size").textContent = innerWidth + " × " + innerHeight;
+    document.getElementById("dpr").textContent = String(devicePixelRatio);
+  };
+  addEventListener("resize", upd); upd();
+  const ipc = document.getElementById("ipc");
+  try {
+    const w = window.__TAURI__.window.getCurrentWindow();
+    document.getElementById("min").onclick = () => w.minimize();
+    document.getElementById("max").onclick = () => w.toggleMaximize();
+    document.getElementById("close").onclick = () => w.close();
+    ipc.textContent = "listo"; ipc.className = "ok";
+  } catch (e) { ipc.textContent = "falló: " + e; }
+})();
+</script>
+</body></html>

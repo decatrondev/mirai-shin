@@ -1,0 +1,20 @@
+# Flatpak de la prueba 4.0 (no se distribuye): el exe ya compilado en el equipo
+# (target/tauri-probe/release) sobre el runtime de GNOME 50, que trae WebKitGTK 4.1.
+id: net.decatron.MiraiShin.Probe
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+command: miraishin-tauri-probe
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --share=ipc
+modules:
+  - name: probe
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 miraishin-tauri-probe /app/bin/miraishin-tauri-probe
+    sources:
+      - type: file
+        path: ../../../target/tauri-probe/release/miraishin-tauri-probe

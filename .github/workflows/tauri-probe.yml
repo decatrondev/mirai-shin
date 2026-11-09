@@ -1,0 +1,29 @@
+name: Prueba de Tauri
+
+# Fase 4.0: exe de la ventana Tauri de prueba (tools/tauri-probe) para probarla en un Windows
+# real. Va aparte del CI de siempre porque la prueba está fuera del workspace.
+on:
+  push:
+    branches: [main]
+    paths: ["tools/tauri-probe/**", ".github/workflows/tauri-probe.yml"]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    name: Tauri probe (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tools/tauri-probe
+      - name: Compilar
+        shell: bash
+        working-directory: tools/tauri-probe
+        run: cargo build --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tauri-probe-windows
+          path: tools/tauri-probe/target/release/miraishin-tauri-probe.exe
+          retention-days: 14

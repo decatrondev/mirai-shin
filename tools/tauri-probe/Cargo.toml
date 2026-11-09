@@ -1,0 +1,20 @@
+[package]
+name = "miraishin-tauri-probe"
+description = "Prueba mínima (fase 4.0): ventana Tauri sin marco del sistema, con marco propio. Mide arranque y consumo del WebView. No se distribuye"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+publish = false
+
+# Fuera del workspace: no mete WebKitGTK en el CI de siempre. Lo compila `tauri-probe.yml`.
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[profile.release]
+strip = true
+lto = "thin"
