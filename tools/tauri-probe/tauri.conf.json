@@ -9,5 +9,5 @@
     "windows": [{ "title": "Tauri probe", "width": 1100, "height": 700, "minWidth": 640, "minHeight": 420, "decorations": false }],
     "security": { "csp": null }
   },
-  "bundle": { "active": false, "icon": ["icons/icon.png"] }
+  "bundle": { "active": false, "icon": ["icons/icon.png", "icons/icon.ico"] }
 }
