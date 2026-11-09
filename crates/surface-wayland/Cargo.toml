@@ -18,6 +18,8 @@ tracing = { workspace = true }
 khronos-egl = { version = "6", features = ["dynamic"] }
 wayland-egl = "0.32"
 wayland-backend = { version = "0.3", features = ["client_system", "dlopen"] }
+# Pantalla apagada en KDE (fase 3.4): `org_kde_kwin_dpms` de KWin.
+wayland-protocols-plasma = { version = "0.3", features = ["client"] }
 
 [dev-dependencies]
 miraishin-render-image = { workspace = true }

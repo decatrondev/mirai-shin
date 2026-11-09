@@ -100,6 +100,7 @@ const TEXTS: &[(&str, &str, &str)] = &[
     ("outputs_empty", "sin fondo", "no wallpaper"),
     ("outputs_paused", "en pausa: {}", "paused: {}"),
     ("pause_manual", "a mano", "by you"),
+    ("pause_sleep", "equipo suspendido", "computer asleep"),
     ("pause_locked", "pantalla bloqueada", "screen locked"),
     ("pause_screen_off", "pantalla apagada", "screen off"),
     ("pause_battery", "con batería", "on battery"),
@@ -134,6 +135,11 @@ const TEXTS: &[(&str, &str, &str)] = &[
     ("status_power_unavailable",
      "Energía: no se sabe (el sistema no lo informa); el video no se pausa por batería",
      "Power: unknown (the system does not report it); videos are not paused on battery"),
+    ("status_lock_unlocked", "Bloqueo de pantalla: desbloqueada", "Screen lock: unlocked"),
+    ("status_lock_locked", "Bloqueo de pantalla: bloqueada", "Screen lock: locked"),
+    ("status_lock_unavailable",
+     "Bloqueo de pantalla: no se sabe (el sistema no lo informa); el video no se pausa al bloquear",
+     "Screen lock: unknown (the system does not report it); videos are not paused on lock"),
     ("list_empty", "La biblioteca está vacía. Copia carpetas de fondos a la carpeta de fondos y usa «rescan».",
      "The library is empty. Copy wallpaper folders into the wallpapers folder and run \"rescan\"."),
     ("list_invalid", "con problemas", "with problems"),
@@ -214,6 +220,7 @@ mod tests {
     fn cada_motivo_de_pausa_tiene_texto() {
         for code in [
             "manual",
+            "sleep",
             "locked",
             "screen_off",
             "battery",

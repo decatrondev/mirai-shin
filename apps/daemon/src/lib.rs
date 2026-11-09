@@ -3,6 +3,7 @@
 pub mod copies;
 pub mod display;
 pub mod power;
+pub mod session;
 
 use chrono::Utc;
 use display::{Display, SurfaceFactory};
@@ -17,6 +18,7 @@ use miraishin_store::library::StoreError;
 use miraishin_store::{paths::redact, Library, Paths, Settings, ALL_OUTPUTS};
 use power::PowerState;
 use serde_json::{json, Value};
+use session::{LockState, SessionEvent};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -53,6 +55,9 @@ pub struct RunConfig {
     /// De dónde se sabe si el equipo está con batería. `None` = la de este equipo
     /// (`power::system`, UPower en Linux).
     pub power: Option<power::PowerFactory>,
+    /// De dónde se sabe si la sesión está bloqueada o el equipo se suspende. `None` = la de
+    /// este equipo (`session::system`, logind en Linux).
+    pub session: Option<session::SessionFactory>,
 }
 
 /// Lo que en un equipo real se detecta solo (ver `RunConfig::video_env`).
@@ -188,10 +193,32 @@ pub async fn run(config: RunConfig) -> Result<(), RunError> {
         });
         config.power.unwrap_or_else(power::system)(sink);
     }
+    let lock = Arc::new(Mutex::new(LockState::Unavailable));
+    {
+        let state = lock.clone();
+        let display = screen.clone();
+        let sink: session::SessionSink = Arc::new(move |event| match event {
+            SessionEvent::Lock(new) => {
+                let mut now = state.lock().unwrap_or_else(|p| p.into_inner());
+                if *now == new {
+                    return;
+                }
+                *now = new;
+                tracing::info!(lock = new.as_str(), "session lock");
+                display.set_locked(new == LockState::Locked);
+            }
+            SessionEvent::Sleep(asleep) => {
+                tracing::info!(asleep, "system sleep");
+                display.set_asleep(asleep);
+            }
+        });
+        config.session.unwrap_or_else(session::system)(sink);
+    }
     let daemon = Arc::new(Daemon {
         library,
         display: screen.clone(),
         power,
+        lock,
         wallpapers_dir,
         started: Instant::now(),
         license: Box::new(miraishin_license::NotRequired),
@@ -213,7 +240,8 @@ pub async fn run(config: RunConfig) -> Result<(), RunError> {
     .await;
     // Deja salir la respuesta a `shutdown` antes de cerrar.
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    screen.stop();
+    // Espera a que el hilo del fondo suelte la superficie (bloquea: fuera del runtime).
+    let _ = tokio::task::spawn_blocking(move || screen.stop()).await;
     tracing::info!("daemon stopped");
     Ok(())
 }
@@ -244,6 +272,7 @@ struct Daemon {
     library: Arc<Mutex<Library>>,
     display: Display,
     power: Arc<Mutex<PowerState>>,
+    lock: Arc<Mutex<LockState>>,
     wallpapers_dir: PathBuf,
     started: Instant,
     license: Box<dyn LicenseProvider>,
@@ -299,6 +328,12 @@ impl Daemon {
             session: env_text("XDG_SESSION_TYPE"),
             power: self
                 .power
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .as_str()
+                .to_string(),
+            lock: self
+                .lock
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
                 .as_str()

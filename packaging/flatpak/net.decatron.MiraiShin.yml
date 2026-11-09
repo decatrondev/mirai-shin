@@ -16,8 +16,10 @@ finish-args:
   - --filesystem=xdg-data/plasma/wallpapers:create
   # Video en Sway/Hyprland (fase 2): la GPU para dibujar (EGL) y decodificar (VA-API).
   - --device=dri
-  # Pausar el video con batería (fase 3.2): solo leer UPower en el bus de sistema.
+  # Pausar el video con batería (3.2), al bloquear y al suspender (3.4): solo leer UPower y
+  # logind en el bus de sistema.
   - --system-talk-name=org.freedesktop.UPower
+  - --system-talk-name=org.freedesktop.login1
 build-options:
   append-path: /usr/lib/sdk/rust-stable/bin
   env:

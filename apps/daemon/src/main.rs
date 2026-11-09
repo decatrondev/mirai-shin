@@ -28,6 +28,7 @@ fn main() -> ExitCode {
         surface: None,
         video_env: None,
         power: None,
+        session: None,
     };
     match runtime.block_on(run(config)) {
         Ok(()) => ExitCode::SUCCESS,

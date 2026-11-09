@@ -243,6 +243,16 @@ fn print_human(lang: Language, method: &str, value: Value) {
             if let Some(key) = power {
                 println!("{}", t(lang, key));
             }
+            // Vacío con un daemon anterior a la fase 3.4: no se muestra.
+            let lock = match s.lock.as_str() {
+                "" => None,
+                "locked" => Some("status_lock_locked"),
+                "unlocked" => Some("status_lock_unlocked"),
+                _ => Some("status_lock_unavailable"),
+            };
+            if let Some(key) = lock {
+                println!("{}", t(lang, key));
+            }
         }
         methods::OUTPUTS_LIST => print_outputs(lang, value),
         methods::WALLPAPER_SET | methods::WALLPAPER_CLEAR => {

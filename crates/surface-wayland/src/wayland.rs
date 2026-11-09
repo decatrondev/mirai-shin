@@ -30,12 +30,15 @@ use smithay_client_toolkit::{
             backend::ObjectId,
             globals::registry_queue_init,
             protocol::{wl_output, wl_shm, wl_surface},
-            Connection, Proxy, QueueHandle,
+            Connection, Proxy, QueueHandle, WEnum,
         },
         protocols::wp::viewporter::client::{wp_viewport, wp_viewporter},
         protocols_wlr::foreign_toplevel::v1::client::{
             zwlr_foreign_toplevel_handle_v1 as toplevel,
             zwlr_foreign_toplevel_manager_v1 as toplevels,
+        },
+        protocols_wlr::output_power_management::v1::client::{
+            zwlr_output_power_manager_v1 as power_manager, zwlr_output_power_v1 as output_power,
         },
     },
     registry::{ProvidesRegistryState, RegistryState},
@@ -51,6 +54,10 @@ use smithay_client_toolkit::{
         slot::{Buffer, SlotPool},
         Shm, ShmHandler,
     },
+};
+
+use wayland_protocols_plasma::dpms::client::{
+    org_kde_kwin_dpms as kde_dpms, org_kde_kwin_dpms_manager as kde_dpms_manager,
 };
 
 use crate::egl::{self, Egl};
@@ -300,6 +307,26 @@ struct Output {
     wl: wl_output::WlOutput,
     info: OutputInfo,
     background: Option<Background>,
+    /// Aviso de pantalla encendida/apagada (fase 3.4). `None` si el compositor no lo ofrece.
+    power: Option<ScreenPower>,
+    screen_off: bool,
+}
+
+/// Quién avisa si la pantalla de un monitor está apagada.
+enum ScreenPower {
+    /// Sway, Hyprland.
+    Wlr(output_power::ZwlrOutputPowerV1),
+    /// KWin.
+    Kde(kde_dpms::OrgKdeKwinDpms),
+}
+
+impl ScreenPower {
+    fn release(self) {
+        match self {
+            Self::Wlr(p) => p.destroy(),
+            Self::Kde(p) => p.release(),
+        }
+    }
 }
 
 struct State {
@@ -331,6 +358,10 @@ struct State {
     windows: HashMap<ObjectId, ToplevelInfo>,
     /// Lo último avisado de cada monitor tapado (sin entrada = no tapado).
     covered: HashMap<String, Cover>,
+    /// Pantallas encendidas o apagadas (fase 3.4): `wlr-output-power-management` o, en KDE,
+    /// `org_kde_kwin_dpms`.
+    power_manager: Option<power_manager::ZwlrOutputPowerManagerV1>,
+    kde_dpms: Option<kde_dpms_manager::OrgKdeKwinDpmsManager>,
 }
 
 /// Una ventana según `wlr-foreign-toplevel` (se junta hasta su `done`).
@@ -343,6 +374,8 @@ struct ToplevelInfo {
 /// Datos de los objetos de `wlr-foreign-toplevel`.
 struct ToplevelManagerData;
 struct ToplevelData;
+/// Datos del aviso de pantalla de un monitor: a cuál pertenece.
+struct OutputPowerData(wl_output::WlOutput);
 
 fn run(
     commands: smithay_client_toolkit::reexports::calloop::channel::Channel<Command>,
@@ -397,6 +430,28 @@ fn run(
             "window list (wlr-foreign-toplevel)"
         );
     }
+    // Pantalla apagada de cada monitor (fase 3.4). Sway y Hyprland ofrecen el de wlroots;
+    // KWin, el suyo.
+    let power_manager = globals
+        .bind::<power_manager::ZwlrOutputPowerManagerV1, _, _>(&qh, 1..=1, NoEvents)
+        .ok();
+    let kde_dpms = if power_manager.is_none() {
+        globals
+            .bind::<kde_dpms_manager::OrgKdeKwinDpmsManager, _, _>(&qh, 1..=1, NoEvents)
+            .ok()
+    } else {
+        None
+    };
+    tracing::info!(
+        protocol = if power_manager.is_some() {
+            "wlr-output-power-management"
+        } else if kde_dpms.is_some() {
+            "org_kde_kwin_dpms"
+        } else {
+            "none"
+        },
+        "screen power"
+    );
 
     let mut state = State {
         registry: RegistryState::new(&globals),
@@ -419,6 +474,8 @@ fn run(
         _toplevels: toplevel_manager,
         windows: HashMap::new(),
         covered: HashMap::new(),
+        power_manager,
+        kde_dpms,
     };
 
     // Dos idas y vueltas: la primera trae los monitores, la segunda sus datos completos.
@@ -460,8 +517,17 @@ fn run(
     state.ready = true;
     state.publish();
     let _ = ready.send(Ok(()));
-    // Lo que ya estaba tapado al arrancar (los avisos anteriores no se mandaron).
+    // Lo que ya estaba tapado o apagado al arrancar (los avisos anteriores no se mandaron).
     state.update_covered();
+    let off: Vec<String> = state
+        .outputs
+        .iter()
+        .filter(|o| o.screen_off)
+        .map(|o| o.info.name.clone())
+        .collect();
+    for output in off {
+        state.emit(SurfaceEvent::ScreenPower { output, off: true });
+    }
 
     while !state.exit {
         if event_loop.dispatch(None, &mut state).is_err() {
@@ -955,13 +1021,7 @@ impl OutputHandler for State {
         let Some(info) = self.info_of(&wl) else {
             return;
         };
-        self.outputs.push(Output {
-            wl,
-            info: info.clone(),
-            background: None,
-        });
-        self.publish();
-        self.emit(SurfaceEvent::OutputAdded(info));
+        self.add_output(wl, info);
     }
 
     fn update_output(&mut self, _: &Connection, _: &QueueHandle<Self>, wl: wl_output::WlOutput) {
@@ -970,7 +1030,7 @@ impl OutputHandler for State {
         };
         let Some(o) = self.outputs.iter_mut().find(|o| o.wl == wl) else {
             // Llegó sin datos completos la primera vez: se cuenta como nuevo.
-            return self.new_output_from_update(wl, info);
+            return self.add_output(wl, info);
         };
         if o.info == info {
             return;
@@ -988,6 +1048,9 @@ impl OutputHandler for State {
         if let Some(v) = gone.background.as_mut().and_then(|b| b.video.take()) {
             self.release_video(v);
         }
+        if let Some(p) = gone.power.take() {
+            p.release();
+        }
         self.publish();
         self.covered.remove(&gone.info.name);
         self.emit(SurfaceEvent::OutputRemoved {
@@ -998,11 +1061,21 @@ impl OutputHandler for State {
 }
 
 impl State {
-    fn new_output_from_update(&mut self, wl: wl_output::WlOutput, info: OutputInfo) {
+    fn add_output(&mut self, wl: wl_output::WlOutput, info: OutputInfo) {
+        let data = || OutputPowerData(wl.clone());
+        let power = if let Some(pm) = &self.power_manager {
+            Some(ScreenPower::Wlr(pm.get_output_power(&wl, &self.qh, data())))
+        } else {
+            self.kde_dpms
+                .as_ref()
+                .map(|m| ScreenPower::Kde(m.get(&wl, &self.qh, data())))
+        };
         self.outputs.push(Output {
             wl,
             info: info.clone(),
             background: None,
+            power,
+            screen_off: false,
         });
         self.publish();
         self.emit(SurfaceEvent::OutputAdded(info));
@@ -1278,6 +1351,92 @@ impl Dispatch2<toplevel::ZwlrForeignToplevelHandleV1, State> for ToplevelData {
                 state.update_covered();
             }
             _ => {}
+        }
+    }
+}
+
+impl Dispatch2<power_manager::ZwlrOutputPowerManagerV1, State> for NoEvents {
+    fn event(
+        &self,
+        _: &mut State,
+        _: &power_manager::ZwlrOutputPowerManagerV1,
+        _: power_manager::Event,
+        _: &Connection,
+        _: &QueueHandle<State>,
+    ) {
+    }
+}
+
+impl Dispatch2<kde_dpms_manager::OrgKdeKwinDpmsManager, State> for NoEvents {
+    fn event(
+        &self,
+        _: &mut State,
+        _: &kde_dpms_manager::OrgKdeKwinDpmsManager,
+        _: kde_dpms_manager::Event,
+        _: &Connection,
+        _: &QueueHandle<State>,
+    ) {
+    }
+}
+
+impl State {
+    /// Guarda si la pantalla de `wl` está apagada y avisa si cambió.
+    fn set_screen_off(&mut self, wl: &wl_output::WlOutput, off: bool) {
+        let Some(o) = self.outputs.iter_mut().find(|o| &o.wl == wl) else {
+            return;
+        };
+        if o.screen_off == off {
+            return;
+        }
+        o.screen_off = off;
+        let output = o.info.name.clone();
+        self.emit(SurfaceEvent::ScreenPower { output, off });
+    }
+}
+
+impl Dispatch2<output_power::ZwlrOutputPowerV1, State> for OutputPowerData {
+    fn event(
+        &self,
+        state: &mut State,
+        _: &output_power::ZwlrOutputPowerV1,
+        event: output_power::Event,
+        _: &Connection,
+        _: &QueueHandle<State>,
+    ) {
+        match event {
+            output_power::Event::Mode { mode } => {
+                state.set_screen_off(&self.0, mode == WEnum::Value(output_power::Mode::Off))
+            }
+            // El monitor ya no se puede leer (se fue, u otro programa lo controla): se cuenta
+            // como encendido para no dejar el video en pausa sin motivo.
+            output_power::Event::Failed => {
+                if let Some(p) = state
+                    .outputs
+                    .iter_mut()
+                    .find(|o| o.wl == self.0)
+                    .and_then(|o| o.power.take())
+                {
+                    p.release();
+                }
+                state.set_screen_off(&self.0, false);
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Dispatch2<kde_dpms::OrgKdeKwinDpms, State> for OutputPowerData {
+    fn event(
+        &self,
+        state: &mut State,
+        _: &kde_dpms::OrgKdeKwinDpms,
+        event: kde_dpms::Event,
+        _: &Connection,
+        _: &QueueHandle<State>,
+    ) {
+        // `mode`: 0 encendida; en espera, suspendida y apagada cuentan como apagada.
+        if let kde_dpms::Event::Mode { mode } = event {
+            state.set_screen_off(&self.0, mode != 0);
         }
     }
 }

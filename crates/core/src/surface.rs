@@ -149,6 +149,12 @@ pub enum SurfaceEvent {
         fullscreen: bool,
         maximized: bool,
     },
+    /// La pantalla de un monitor se apagó (`off`) o se encendió (fase 3.4). Solo las
+    /// superficies que lo saben (Sway/Hyprland, `wlr-output-power-management`).
+    ScreenPower {
+        output: String,
+        off: bool,
+    },
 }
 
 /// Por dónde una superficie entrega sus avisos. Se le da al crearla; la llama desde su

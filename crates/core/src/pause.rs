@@ -8,6 +8,8 @@
 pub enum PauseReason {
     /// La persona lo pausó (`ctl pause`).
     Manual,
+    /// El equipo se va a suspender (fase 3.4). Siempre vale, no tiene ajuste.
+    Sleep,
     /// La sesión está bloqueada.
     Locked,
     /// La pantalla de ese monitor está apagada.
@@ -24,6 +26,7 @@ impl PauseReason {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Manual => "manual",
+            Self::Sleep => "sleep",
             Self::Locked => "locked",
             Self::ScreenOff => "screen_off",
             Self::Battery => "battery",
@@ -63,6 +66,8 @@ impl Default for PauseSettings {
 pub struct SystemSignals {
     pub locked: bool,
     pub on_battery: bool,
+    /// El equipo se va a suspender (logind `PrepareForSleep`, fase 3.4).
+    pub asleep: bool,
     /// `ctl pause` sin monitor.
     pub manual_all: bool,
 }
@@ -87,6 +92,7 @@ pub fn decide(
 ) -> Option<PauseReason> {
     let checks = [
         (system.manual_all || output.manual, PauseReason::Manual),
+        (system.asleep, PauseReason::Sleep),
         (settings.on_lock && system.locked, PauseReason::Locked),
         (
             settings.on_screen_off && output.screen_off,
@@ -289,6 +295,19 @@ mod tests {
             decide(&nada, &SystemSignals::default(), &out(|o| o.manual = true)),
             Some(PauseReason::Manual)
         );
+        // Al suspender tampoco hay ajuste que lo apague; la pausa a mano va primero.
+        let dormido = SystemSignals {
+            asleep: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            decide(&nada, &dormido, &OutputSignals::default()),
+            Some(PauseReason::Sleep)
+        );
+        assert_eq!(
+            decide(&nada, &dormido, &out(|o| o.manual = true)),
+            Some(PauseReason::Manual)
+        );
     }
 
     #[test]
@@ -297,6 +316,7 @@ mod tests {
         let sys = SystemSignals {
             locked: true,
             on_battery: true,
+            asleep: false,
             manual_all: false,
         };
         let o = out(|o| {

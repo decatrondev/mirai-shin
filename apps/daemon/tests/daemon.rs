@@ -70,6 +70,7 @@ async fn ciclo_completo() {
         surface: Some(no_surface()),
         video_env: Some(test_video_env()),
         power: Some(miraishin_daemon::power::none()),
+        session: Some(miraishin_daemon::session::none()),
     }));
     let mut c = connect(&ep).await;
 
@@ -129,6 +130,7 @@ async fn ciclo_completo() {
         surface: Some(no_surface()),
         video_env: Some(test_video_env()),
         power: Some(miraishin_daemon::power::none()),
+        session: Some(miraishin_daemon::session::none()),
     })
     .await;
     assert!(matches!(second, Err(RunError::AlreadyRunning)));
@@ -174,6 +176,7 @@ async fn carpeta_elegida_que_no_existe() {
         surface: Some(no_surface()),
         video_env: Some(test_video_env()),
         power: Some(miraishin_daemon::power::none()),
+        session: Some(miraishin_daemon::session::none()),
     }));
     let mut c = connect(&ep).await;
     let status = c.call(methods::STATUS, Value::Null).await.unwrap();

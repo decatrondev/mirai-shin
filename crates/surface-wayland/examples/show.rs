@@ -103,6 +103,9 @@ fn main() {
             }) => println!(
                 "evento: tapado {output} pantalla_completa={fullscreen} maximizada={maximized}"
             ),
+            Ok(SurfaceEvent::ScreenPower { output, off }) => {
+                println!("evento: pantalla {output} apagada={off}")
+            }
             Err(_) => break,
         }
     }

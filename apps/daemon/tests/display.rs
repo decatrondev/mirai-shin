@@ -210,7 +210,14 @@ fn start_with(
     screen: &Shared,
     env: miraishin_daemon::VideoEnv,
 ) -> tokio::task::JoinHandle<()> {
-    start_full(paths, ep, screen, env, miraishin_daemon::power::none())
+    start_full(
+        paths,
+        ep,
+        screen,
+        env,
+        miraishin_daemon::power::none(),
+        miraishin_daemon::session::none(),
+    )
 }
 
 fn start_full(
@@ -219,6 +226,7 @@ fn start_full(
     screen: &Shared,
     env: miraishin_daemon::VideoEnv,
     power: miraishin_daemon::power::PowerFactory,
+    session: miraishin_daemon::session::SessionFactory,
 ) -> tokio::task::JoinHandle<()> {
     let config = RunConfig {
         paths: paths.clone(),
@@ -228,6 +236,7 @@ fn start_full(
         surface: Some(factory(screen.clone())),
         video_env: Some(env),
         power: Some(power),
+        session: Some(session),
     };
     tokio::spawn(async move {
         run(config).await.unwrap();
@@ -386,6 +395,7 @@ async fn sin_superficie_se_guarda_igual() {
         surface: Some(Box::new(|_| Err("kde_plugin_needs_restart".into()))),
         video_env: Some(test_video_env()),
         power: Some(miraishin_daemon::power::none()),
+        session: Some(miraishin_daemon::session::none()),
     };
     let task = tokio::spawn(async move { run(config).await.unwrap() });
     let mut c = connect(&ep).await;
@@ -867,6 +877,7 @@ async fn pausa_con_bateria() {
         &screen,
         test_video_env(),
         Box::new(move |sink| *keep.lock().unwrap() = Some(sink)),
+        miraishin_daemon::session::none(),
     );
     let mut c = connect(&ep).await;
     let send = |s: PowerState| (power.lock().unwrap().as_ref().unwrap())(s);
@@ -910,6 +921,84 @@ async fn pausa_con_bateria() {
     send(PowerState::Battery);
     wait_for(|| screen.lock().unwrap().paused.contains("DP-1")).await;
     send(PowerState::Unavailable);
+    wait_for(|| screen.lock().unwrap().paused.is_empty()).await;
+    stop(c, task).await;
+}
+
+#[tokio::test]
+async fn pausa_al_bloquear_suspender_y_apagar() {
+    use miraishin_daemon::session::{LockState, SessionEvent, SessionSink};
+    let t = tempfile::tempdir().unwrap();
+    let paths = Paths::under(t.path());
+    let ep = endpoint(t.path());
+    video_wallpaper(&paths.default_wallpapers_dir(), "olas");
+    let screen: Shared = Arc::new(Mutex::new(Screen {
+        outputs: vec![out("DP-1", 100, 50, 120), out("HDMI-A-1", 40, 40, 120)],
+        plays_video: true,
+        pauses: true,
+        ..Screen::default()
+    }));
+    // logind falso: se guarda a quién avisar y se le mandan cambios a mano.
+    let session: Arc<Mutex<Option<SessionSink>>> = Arc::default();
+    let keep = session.clone();
+    let task = start_full(
+        &paths,
+        &ep,
+        &screen,
+        test_video_env(),
+        miraishin_daemon::power::none(),
+        Box::new(move |sink| *keep.lock().unwrap() = Some(sink)),
+    );
+    let mut c = connect(&ep).await;
+    let send = |e: SessionEvent| (session.lock().unwrap().as_ref().unwrap())(e);
+    let status = c.call(methods::STATUS, Value::Null).await.unwrap();
+    assert_eq!(status["lock"], json!("unavailable"));
+    c.call(methods::WALLPAPER_SET, json!({"folder": "olas"}))
+        .await
+        .unwrap();
+    send(SessionEvent::Lock(LockState::Unlocked));
+    let status = c.call(methods::STATUS, Value::Null).await.unwrap();
+    assert_eq!(status["lock"], json!("unlocked"));
+    assert!(screen.lock().unwrap().paused.is_empty());
+
+    // Bloqueada: los dos monitores.
+    send(SessionEvent::Lock(LockState::Locked));
+    wait_for(|| screen.lock().unwrap().paused.len() == 2).await;
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(paused(&list, "DP-1"), json!("locked"));
+    let status = c.call(methods::STATUS, Value::Null).await.unwrap();
+    assert_eq!(status["lock"], json!("locked"));
+    send(SessionEvent::Lock(LockState::Unlocked));
+    wait_for(|| screen.lock().unwrap().paused.is_empty()).await;
+
+    // Suspensión: en pausa hasta despertar.
+    send(SessionEvent::Sleep(true));
+    wait_for(|| screen.lock().unwrap().paused.len() == 2).await;
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(paused(&list, "HDMI-A-1"), json!("sleep"));
+    send(SessionEvent::Sleep(false));
+    wait_for(|| screen.lock().unwrap().paused.is_empty()).await;
+
+    // Pantalla apagada: solo ese monitor.
+    let power = |output: &str, off: bool| {
+        let mut s = screen.lock().unwrap();
+        (s.sink.as_mut().unwrap())(SurfaceEvent::ScreenPower {
+            output: output.into(),
+            off,
+        });
+    };
+    power("HDMI-A-1", true);
+    wait_for(|| screen.lock().unwrap().paused.contains("HDMI-A-1")).await;
+    let list = c.call(methods::OUTPUTS_LIST, Value::Null).await.unwrap();
+    assert_eq!(paused(&list, "HDMI-A-1"), json!("screen_off"));
+    assert_eq!(paused(&list, "DP-1"), Value::Null);
+    power("HDMI-A-1", false);
+    wait_for(|| screen.lock().unwrap().paused.is_empty()).await;
+
+    // Sin logind (se cortó) no se pausa por bloqueo.
+    send(SessionEvent::Lock(LockState::Locked));
+    wait_for(|| screen.lock().unwrap().paused.len() == 2).await;
+    send(SessionEvent::Lock(LockState::Unavailable));
     wait_for(|| screen.lock().unwrap().paused.is_empty()).await;
     stop(c, task).await;
 }

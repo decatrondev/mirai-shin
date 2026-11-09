@@ -153,6 +153,10 @@ pub struct StatusResult {
     /// permiso). Vacío con un daemon anterior.
     #[serde(default)]
     pub power: String,
+    /// Bloqueo de la sesión (fase 3.4): `locked`, `unlocked` o `unavailable` (sin logind o
+    /// sin permiso). Vacío con un daemon anterior.
+    #[serde(default)]
+    pub lock: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

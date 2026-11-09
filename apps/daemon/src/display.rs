@@ -46,6 +46,10 @@ enum Msg {
     Pause(Option<String>, bool, oneshot::Sender<()>),
     /// El equipo pasó a batería (`true`) o al cargador (fase 3.2).
     OnBattery(bool),
+    /// La sesión se bloqueó (`true`) o se desbloqueó (fase 3.4).
+    Locked(bool),
+    /// El equipo se va a suspender (`true`) o ya despertó (fase 3.4).
+    Asleep(bool),
     Stop,
 }
 
@@ -78,7 +82,12 @@ pub struct Display {
     tx: mpsc::Sender<Msg>,
     surface: String,
     available: bool,
+    /// Avisa cuando el hilo terminó y soltó la superficie (ver `stop`).
+    finished: Arc<Mutex<mpsc::Receiver<()>>>,
 }
+
+/// Cuánto espera `stop` a que el hilo suelte la superficie.
+const STOP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 
 impl Display {
     pub fn start(
@@ -140,9 +149,13 @@ impl Display {
             paused: HashMap::new(),
             pause_unsupported: HashSet::new(),
         };
+        let (finished_tx, finished) = mpsc::channel();
         let started = std::thread::Builder::new()
             .name("display".into())
-            .spawn(move || worker.run(rx));
+            .spawn(move || {
+                worker.run(rx);
+                let _ = finished_tx.send(());
+            });
         if started.is_err() {
             tracing::error!("could not start the display thread");
         }
@@ -150,6 +163,7 @@ impl Display {
             tx,
             surface: name,
             available: available && started.is_ok(),
+            finished: Arc::new(Mutex::new(finished)),
         };
         display.apply_nowait();
         display
@@ -192,8 +206,25 @@ impl Display {
         let _ = self.tx.send(Msg::OnBattery(on_battery));
     }
 
+    /// Sesión bloqueada o no (lo avisa `session`). No espera.
+    pub fn set_locked(&self, locked: bool) {
+        let _ = self.tx.send(Msg::Locked(locked));
+    }
+
+    /// El equipo se va a suspender o despertó (lo avisa `session`). No espera.
+    pub fn set_asleep(&self, asleep: bool) {
+        let _ = self.tx.send(Msg::Asleep(asleep));
+    }
+
+    /// Para el hilo y espera (hasta `STOP_TIMEOUT`) a que suelte la superficie. Si el proceso
+    /// sale antes, las bibliotecas de video se descargan mientras el hilo de Wayland todavía
+    /// dibuja, y el daemon se cae al cerrar (visto en Sway con un video puesto).
     pub fn stop(&self) {
         let _ = self.tx.send(Msg::Stop);
+        let finished = self.finished.lock().unwrap_or_else(|p| p.into_inner());
+        if let Err(mpsc::RecvTimeoutError::Timeout) = finished.recv_timeout(STOP_TIMEOUT) {
+            tracing::warn!("the display thread did not stop in time");
+        }
     }
 }
 
@@ -301,6 +332,16 @@ impl Worker {
                         }
                     }
                 }
+                Msg::Surface(SurfaceEvent::ScreenPower { output, off }) => {
+                    let s = self.signals.entry(output.clone()).or_default();
+                    if s.screen_off != off {
+                        s.screen_off = off;
+                        tracing::info!(output = %output, off, "screen power");
+                        if self.update_pause() {
+                            self.send_outputs();
+                        }
+                    }
+                }
                 Msg::Surface(e) => {
                     if let SurfaceEvent::OutputRemoved { name } = &e {
                         self.shown.remove(name);
@@ -351,14 +392,9 @@ impl Worker {
                     }
                     let _ = reply.send(());
                 }
-                Msg::OnBattery(on) => {
-                    if self.system.on_battery != on {
-                        self.system.on_battery = on;
-                        if self.update_pause() {
-                            self.send_outputs();
-                        }
-                    }
-                }
+                Msg::OnBattery(on) => self.set_system(|s| &mut s.on_battery, on),
+                Msg::Locked(on) => self.set_system(|s| &mut s.locked, on),
+                Msg::Asleep(on) => self.set_system(|s| &mut s.asleep, on),
                 Msg::Stop => break,
             }
         }
@@ -568,6 +604,17 @@ impl Worker {
 
     /// Pausa a mano: sin monitor, todos; con monitor, solo ese. Quitar la pausa de un monitor
     /// cuando estaban todos en pausa deja en pausa a los demás.
+    /// Cambia una señal de todo el equipo y vuelve a decidir la pausa.
+    fn set_system(&mut self, field: fn(&mut SystemSignals) -> &mut bool, on: bool) {
+        let f = field(&mut self.system);
+        if *f != on {
+            *f = on;
+            if self.update_pause() {
+                self.send_outputs();
+            }
+        }
+    }
+
     fn set_manual(&mut self, output: Option<String>, paused: bool) {
         match (output, paused) {
             (None, true) => self.system.manual_all = true,
