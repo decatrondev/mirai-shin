@@ -20,6 +20,10 @@ The product name lives only in [`brand.json`](brand.json). Never write it by han
 
 Every visible text is written in English and Spanish from the start, using translation keys.
 
+## Power use
+
+If a change touches video, pausing or the drawing loop, run `scripts/consumo-pausa.sh` before pushing it. It starts a headless Sway, plays a 60 fps video and fails if, while paused (by hand or with the screen off), the daemon uses more than 5 CPU ticks every 5 s, or if the frame limit saves nothing. CI has no screen or GPU, so this does not run there. It needs `sway`, `ffmpeg` and libmpv.
+
 ---
 
 En español: [`CONTRIBUTING.es.md`](CONTRIBUTING.es.md).

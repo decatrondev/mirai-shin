@@ -20,6 +20,10 @@ El nombre vive solo en [`brand.json`](brand.json). Nunca se escribe a mano en el
 
 Todo texto visible nace en inglés y en español, con claves de traducción.
 
+## Consumo
+
+Si un cambio toca el video, la pausa o el bucle de dibujo, corre `scripts/consumo-pausa.sh` antes de subirlo. Arma un Sway sin pantalla, pone un video de 60 cuadros y falla si en pausa (a mano o con la pantalla apagada) el daemon gasta más de 5 ticks de CPU cada 5 s, o si el límite de cuadros no ahorra. El CI no tiene pantalla ni GPU, así que esto no corre ahí. Necesita `sway`, `ffmpeg` y libmpv.
+
 ---
 
 In English: [`CONTRIBUTING.md`](CONTRIBUTING.md).
