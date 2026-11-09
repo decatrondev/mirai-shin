@@ -51,12 +51,23 @@ pub type SessionSink = Arc<dyn Fn(SessionEvent) + Send + Sync>;
 /// propia que guarda el `sink` para mandarle cambios a mano.
 pub type SessionFactory = Box<dyn FnOnce(SessionSink) + Send>;
 
-/// La de este equipo: logind en Linux, nada en los demás (queda «no disponible»).
+/// La de este equipo: logind en Linux, los avisos de sesión de Windows (fase 3.6; Windows
+/// suspende el proceso entero, no hace falta avisar la suspensión), nada en los demás.
 pub fn system() -> SessionFactory {
     Box::new(|sink| {
         #[cfg(target_os = "linux")]
         logind::start(None, sink);
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(windows)]
+        {
+            let s = sink.clone();
+            let started = miraishin_surface_windows::signals::watch_lock(Box::new(move |locked| {
+                s(SessionEvent::Lock(LockState::from_locked(locked)))
+            }));
+            if !started {
+                sink(SessionEvent::Lock(LockState::Unavailable));
+            }
+        }
+        #[cfg(not(any(target_os = "linux", windows)))]
         sink(SessionEvent::Lock(LockState::Unavailable));
     })
 }

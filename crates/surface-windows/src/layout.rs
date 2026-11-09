@@ -2,6 +2,9 @@
 //! CI de Linux): escala, posición de cada monitor dentro del escritorio, cambios de monitores
 //! y el formato de los píxeles.
 
+use std::collections::HashMap;
+
+use miraishin_core::pause::Cover;
 use miraishin_core::surface::{OutputInfo, Scale, Size, SurfaceEvent};
 
 /// DPI de Windows al 100 %.
@@ -194,6 +197,84 @@ pub fn rgba_to_bgrx(rgba: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Una ventana de primer nivel tal como se lee en la lista de Windows (fase 3.6), ya sin las
+/// que no cuentan: ocultas, en otro escritorio virtual (`cloaked`), herramientas, el
+/// escritorio, la barra de tareas y las nuestras.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TopWindow {
+    /// Borde visible (sin la sombra), en píxeles reales.
+    pub rect: PxRect,
+    pub maximized: bool,
+    pub minimized: bool,
+}
+
+/// Monitor donde está una ventana: el que tiene la mayor parte de ella. `None` si no toca
+/// ninguno.
+pub fn monitor_of(rect: PxRect, monitors: &[Monitor]) -> Option<&Monitor> {
+    monitors
+        .iter()
+        .map(|m| (m, overlap(rect, m.rect)))
+        .filter(|(_, area)| *area > 0)
+        .max_by_key(|(_, area)| *area)
+        .map(|(m, _)| m)
+}
+
+fn overlap(a: PxRect, b: PxRect) -> i64 {
+    let w = i64::from(a.right.min(b.right)) - i64::from(a.left.max(b.left));
+    let h = i64::from(a.bottom.min(b.bottom)) - i64::from(a.top.max(b.top));
+    if w <= 0 || h <= 0 {
+        0
+    } else {
+        w * h
+    }
+}
+
+/// Qué monitores tienen el fondo tapado. Igual que en KDE: cuenta cualquier ventana visible
+/// y no minimizada, maximizada o en pantalla completa en ese monitor (las de otros
+/// escritorios virtuales ya vienen quitadas). Pantalla completa = cubre todo el monitor,
+/// barra de tareas incluida, sin estar maximizada (una maximizada deja ver la barra).
+/// `d3d_fullscreen`: monitor de la ventana del frente si Windows dice que hay un juego en
+/// pantalla completa exclusiva (`SHQueryUserNotificationState`). Devuelve solo los tapados.
+pub fn covered(
+    windows: &[TopWindow],
+    monitors: &[Monitor],
+    d3d_fullscreen: Option<&str>,
+) -> HashMap<String, Cover> {
+    let mut out: HashMap<String, Cover> = HashMap::new();
+    for w in windows {
+        if w.minimized {
+            continue;
+        }
+        let Some(m) = monitor_of(w.rect, monitors) else {
+            continue;
+        };
+        let full = !w.maximized
+            && w.rect.left <= m.rect.left
+            && w.rect.top <= m.rect.top
+            && w.rect.right >= m.rect.right
+            && w.rect.bottom >= m.rect.bottom;
+        if !(full || w.maximized) {
+            continue;
+        }
+        let c = out.entry(m.name.clone()).or_default();
+        c.fullscreen |= full;
+        c.maximized |= w.maximized;
+    }
+    if let Some(name) = d3d_fullscreen {
+        if monitors.iter().any(|m| m.name == name) {
+            out.entry(name.to_string()).or_default().fullscreen = true;
+        }
+    }
+    out
+}
+
+/// Energía según los avisos de Windows: `GUID_ACDC_POWER_SOURCE` (0 = cargador, 1 =
+/// batería, 2 = UPS) y `GUID_POWER_SAVING_STATUS` (1 = ahorro de batería encendido). El
+/// ahorro cuenta como batería (decidido en el plan de la fase 3).
+pub fn on_battery(ac_source: u32, saver_on: bool) -> bool {
+    ac_source != 0 || saver_on
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -324,5 +405,96 @@ mod tests {
             rgba_to_bgrx(&[1, 2, 3, 0, 4, 5, 6, 128]),
             vec![3, 2, 1, 255, 6, 5, 4, 255]
         );
+    }
+
+    fn area(name: &str, left: i32, top: i32, w: i32, h: i32) -> Monitor {
+        Monitor {
+            name: name.into(),
+            rect: PxRect {
+                left,
+                top,
+                right: left + w,
+                bottom: top + h,
+            },
+            dpi: 96,
+        }
+    }
+
+    fn win(left: i32, top: i32, right: i32, bottom: i32, maximized: bool) -> TopWindow {
+        TopWindow {
+            rect: PxRect {
+                left,
+                top,
+                right,
+                bottom,
+            },
+            maximized,
+            minimized: false,
+        }
+    }
+
+    #[test]
+    fn ventanas_que_tapan() {
+        // Dos monitores: el principal 1920×1080 y otro a la izquierda.
+        let ms = [
+            area("D1", 0, 0, 1920, 1080),
+            area("D2", -1280, 0, 1280, 1024),
+        ];
+        // Juego en pantalla completa en D1, ventana normal en D2: solo D1.
+        let c = covered(
+            &[
+                win(0, 0, 1920, 1080, false),
+                win(-1000, 100, -200, 700, false),
+            ],
+            &ms,
+            None,
+        );
+        assert_eq!(c.len(), 1);
+        assert_eq!(
+            c["D1"],
+            Cover {
+                fullscreen: true,
+                maximized: false
+            }
+        );
+        // Maximizada en D2 (deja la barra): maximizada, no pantalla completa.
+        let c = covered(&[win(-1280, 0, 0, 984, true)], &ms, None);
+        assert_eq!(
+            c["D2"],
+            Cover {
+                fullscreen: false,
+                maximized: true
+            }
+        );
+        // Minimizada o normal: nada.
+        let mut m = win(0, 0, 1920, 1040, true);
+        m.minimized = true;
+        assert!(covered(&[m, win(10, 10, 800, 600, false)], &ms, None).is_empty());
+        // Una ventana que cruza: cuenta donde está la mayor parte.
+        assert_eq!(
+            monitor_of(
+                PxRect {
+                    left: -300,
+                    top: 0,
+                    right: 1500,
+                    bottom: 900
+                },
+                &ms
+            )
+            .map(|m| m.name.as_str()),
+            Some("D1")
+        );
+        // Juego en pantalla completa exclusiva que Windows informa aparte.
+        let c = covered(&[], &ms, Some("D2"));
+        assert!(c["D2"].fullscreen);
+        assert!(covered(&[], &ms, Some("D9")).is_empty());
+    }
+
+    #[test]
+    fn energia() {
+        assert!(!on_battery(0, false));
+        assert!(on_battery(1, false));
+        assert!(on_battery(2, false));
+        assert!(on_battery(0, true));
     }
 }

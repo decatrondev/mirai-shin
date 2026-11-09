@@ -15,6 +15,8 @@
 pub mod layout;
 
 #[cfg(windows)]
+pub mod signals;
+#[cfg(windows)]
 mod win;
 
 #[cfg(windows)]

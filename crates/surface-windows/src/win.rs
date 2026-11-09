@@ -1,7 +1,7 @@
 //! Hilo de ventanas y la manija (`WindowsSurface`) que cumple el contrato `Surface`.
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::ptr::{null, null_mut};
 use std::rc::Rc;
@@ -10,12 +10,17 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use miraishin_core::fit::FitMode;
+use miraishin_core::pause::Cover;
+use miraishin_core::playback::PlaybackSettings;
 use miraishin_core::surface::{
-    check_frame, EventSink, Frame, OutputInfo, Size, Surface, SurfaceError,
+    check_frame, EventSink, Frame, OutputInfo, Size, Surface, SurfaceError, SurfaceEvent,
 };
 use miraishin_render_video::Player;
 use windows_sys::Win32::Foundation::{
     GetLastError, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM,
+};
+use windows_sys::Win32::Graphics::Dwm::{
+    DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS,
 };
 use windows_sys::Win32::Graphics::Gdi::{
     BeginPaint, ClientToScreen, EndPaint, EnumDisplayMonitors, GetMonitorInfoW, InvalidateRect,
@@ -23,28 +28,39 @@ use windows_sys::Win32::Graphics::Gdi::{
     HALFTONE, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW, PAINTSTRUCT, SRCCOPY,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows_sys::Win32::System::Threading::GetCurrentThreadId;
+use windows_sys::Win32::System::Power::{RegisterPowerSettingNotification, POWERBROADCAST_SETTING};
+use windows_sys::Win32::System::SystemServices::GUID_SESSION_DISPLAY_STATUS;
+use windows_sys::Win32::System::Threading::{GetCurrentProcessId, GetCurrentThreadId};
+use windows_sys::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
 use windows_sys::Win32::UI::HiDpi::{
     GetDpiForMonitor, SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
     MDT_EFFECTIVE_DPI,
 };
+use windows_sys::Win32::UI::Shell::{SHQueryUserNotificationState, QUNS_RUNNING_D3D_FULL_SCREEN};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, EnumWindows, FindWindowExW,
-    FindWindowW, GetClientRect, GetMessageW, GetWindowLongPtrW, IsWindow, KillTimer, PeekMessageW,
-    PostThreadMessageW, RegisterClassExW, RegisterWindowMessageW, SendMessageTimeoutW,
-    SetLayeredWindowAttributes, SetParent, SetTimer, SetWindowLongPtrW, SetWindowPos,
-    TranslateMessage, GWL_EXSTYLE, GWL_STYLE, HTTRANSPARENT, HWND_TOP, LWA_ALPHA, MA_NOACTIVATE,
-    MSG, PM_NOREMOVE, PM_REMOVE, SMTO_ABORTIFHUNG, SMTO_NORMAL, SWP_FRAMECHANGED, SWP_NOACTIVATE,
-    SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, WM_APP, WM_DISPLAYCHANGE, WM_DPICHANGED,
-    WM_ERASEBKGND, WM_MOUSEACTIVATE, WM_NCDESTROY, WM_NCHITTEST, WM_PAINT, WM_SETTINGCHANGE,
-    WM_TIMER, WNDCLASSEXW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_EX_LAYERED,
-    WS_EX_TOOLWINDOW, WS_POPUP,
+    FindWindowW, GetAncestor, GetClassNameW, GetClientRect, GetForegroundWindow, GetMessageW,
+    GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, IsIconic, IsWindow,
+    IsWindowVisible, IsZoomed, KillTimer, PeekMessageW, PostThreadMessageW, RegisterClassExW,
+    RegisterWindowMessageW, SendMessageTimeoutW, SetLayeredWindowAttributes, SetParent, SetTimer,
+    SetWindowLongPtrW, SetWindowPos, TranslateMessage, CHILDID_SELF, DEVICE_NOTIFY_WINDOW_HANDLE,
+    EVENT_OBJECT_CLOAKED, EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE,
+    EVENT_OBJECT_UNCLOAKED, EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND,
+    EVENT_SYSTEM_MINIMIZESTART, GA_ROOT, GWL_EXSTYLE, GWL_STYLE, HTTRANSPARENT, HWND_TOP,
+    LWA_ALPHA, MA_NOACTIVATE, MSG, OBJID_WINDOW, PBT_POWERSETTINGCHANGE, PM_NOREMOVE, PM_REMOVE,
+    SMTO_ABORTIFHUNG, SMTO_NORMAL, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+    SWP_NOZORDER, SWP_SHOWWINDOW, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_APP,
+    WM_DISPLAYCHANGE, WM_DPICHANGED, WM_ERASEBKGND, WM_MOUSEACTIVATE, WM_NCDESTROY, WM_NCHITTEST,
+    WM_PAINT, WM_POWERBROADCAST, WM_SETTINGCHANGE, WM_TIMER, WNDCLASSEXW, WS_CHILD,
+    WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    WS_EX_TRANSPARENT, WS_POPUP,
 };
 
 use crate::layout::{
-    child_rect, diff, form_from_exstyle, output_info, rgba_to_bgrx, DesktopForm, Monitor, PxRect,
-    SpawnArgs,
+    child_rect, covered, diff, form_from_exstyle, monitor_of, output_info, rgba_to_bgrx,
+    DesktopForm, Monitor, PxRect, SpawnArgs, TopWindow,
 };
+use crate::signals::guid_eq;
 
 /// Por qué no se pudo conectar. Códigos estables para `status`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,6 +94,8 @@ enum Command {
     Show(String, Frame),
     ShowVideo(String, PathBuf, FitMode, VideoReply),
     Clear(String),
+    SetPaused(String, bool),
+    SetPlayback(PlaybackSettings),
     Shutdown,
 }
 
@@ -93,6 +111,10 @@ const TIMER_EXPLORER: usize = 2;
 /// Cambio de video: si el nuevo no avisa que empezó, el anterior se cierra igual.
 const TIMER_VIDEO_SWAP: usize = 3;
 const VIDEO_SWAP_TIMEOUT_MS: u32 = 3000;
+/// Cambió alguna ventana (frente, tamaño, minimizada…): se mira qué tapa cada monitor un
+/// momento después, para juntar los avisos de un arrastre o una animación.
+const TIMER_WINDOWS: usize = 4;
+const WINDOWS_DELAY_MS: u32 = 200;
 /// Cuánto se espera a que mpv abra un video antes de responder al daemon.
 const VIDEO_LOAD_TIMEOUT: Duration = Duration::from_secs(8);
 /// Cuánto se espera a que un mpv que se cierra suelte su ventana.
@@ -214,6 +236,18 @@ impl Surface for WindowsSurface {
         self.output(output)?;
         self.send(Command::Clear(output.to_string()))
     }
+
+    /// mpv se pausa y deja de dibujar; queda el último cuadro.
+    fn set_paused(&mut self, output: &str, paused: bool) -> Result<(), SurfaceError> {
+        self.output(output)?;
+        self.send(Command::SetPaused(output.to_string(), paused))
+    }
+
+    /// Velocidad, brillo y límite de cuadros: los hace mpv (el límite con el filtro `fps`,
+    /// igual que en Sway).
+    fn set_playback(&mut self, playback: &PlaybackSettings) -> Result<(), SurfaceError> {
+        self.send(Command::SetPlayback(*playback))
+    }
 }
 
 impl Drop for WindowsSurface {
@@ -246,6 +280,13 @@ thread_local! {
     static VIDEO_SWAP_DUE: Cell<bool> = const { Cell::new(false) };
     /// Mensaje registrado `TaskbarCreated` (lo manda Explorer al arrancar).
     static TASKBAR_CREATED: Cell<u32> = const { Cell::new(0) };
+    /// La ventana oculta (para el temporizador de las ventanas, desde el aviso de Windows).
+    static WATCHER: Cell<isize> = const { Cell::new(0) };
+    /// Ya hay un temporizador de ventanas puesto / llegó su momento.
+    static WINDOWS_PENDING: Cell<bool> = const { Cell::new(false) };
+    static WINDOWS_DIRTY: Cell<bool> = const { Cell::new(false) };
+    /// La pantalla se apagó (`Some(true)`) o se encendió, todavía sin avisar al daemon.
+    static SCREEN_POWER: Cell<Option<bool>> = const { Cell::new(None) };
 }
 
 /// Dónde se cuelgan las ventanas.
@@ -288,6 +329,14 @@ struct State {
     host: Option<Host>,
     shared: Arc<Mutex<Shared>>,
     events: EventSink,
+    // ---- Pausa y reproducción (fase 3.6)
+    /// Monitores con el video en pausa (vale también para un video que se ponga después).
+    paused: HashSet<String>,
+    playback: PlaybackSettings,
+    /// Lo último que se avisó de cada monitor tapado.
+    covers: HashMap<String, Cover>,
+    /// La pantalla está apagada (Windows lo avisa para todas a la vez).
+    screen_off: bool,
 }
 
 type Ready = mpsc::Sender<Result<(u32, DesktopForm), ConnectError>>;
@@ -359,10 +408,53 @@ fn run(rx: mpsc::Receiver<Command>, shared: Arc<Mutex<Shared>>, events: EventSin
             host: None,
             shared,
             events,
+            paused: HashSet::new(),
+            playback: PlaybackSettings::default(),
+            covers: HashMap::new(),
+            screen_off: false,
         };
         state.monitors = enumerate_monitors();
         state.publish_outputs();
+        WATCHER.set(watcher as isize);
+        // Pantalla apagada o encendida (Windows manda el estado actual al registrarse).
+        if RegisterPowerSettingNotification(
+            watcher,
+            &GUID_SESSION_DISPLAY_STATUS,
+            DEVICE_NOTIFY_WINDOW_HANDLE,
+        ) == 0
+        {
+            tracing::warn!(
+                error = GetLastError(),
+                "screen power notification not available"
+            );
+        }
+        // Avisos de ventanas de los demás programas (las nuestras no): sin preguntar a cada
+        // rato, Windows llama a `window_event` desde este mismo bucle.
+        let mut hooks: Vec<HWINEVENTHOOK> = Vec::new();
+        for (min, max) in [
+            (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND),
+            (EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND),
+            (EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE),
+            (EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE),
+            (EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED),
+        ] {
+            let h = SetWinEventHook(
+                min,
+                max,
+                null_mut(),
+                Some(window_event),
+                0,
+                0,
+                WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+            );
+            if h.is_null() {
+                tracing::warn!(min, "window events not available");
+            } else {
+                hooks.push(h);
+            }
+        }
         let _ = ready.send(Ok((GetCurrentThreadId(), form)));
+        state.scan_windows();
 
         'outer: loop {
             if GetMessageW(&mut msg, null_mut(), 0, 0) <= 0 {
@@ -376,6 +468,8 @@ fn run(rx: mpsc::Receiver<Command>, shared: Arc<Mutex<Shared>>, events: EventSin
                             let _ = reply.send(state.show_video(name, path, mode));
                         }
                         Command::Clear(name) => state.clear(&name),
+                        Command::SetPaused(name, paused) => state.set_paused(&name, paused),
+                        Command::SetPlayback(p) => state.set_playback(p),
                         Command::Shutdown => break 'outer,
                     }
                 }
@@ -395,6 +489,16 @@ fn run(rx: mpsc::Receiver<Command>, shared: Arc<Mutex<Shared>>, events: EventSin
             if VIDEO_SWAP_DUE.replace(false) {
                 state.close_old_players();
             }
+            if WINDOWS_DIRTY.replace(false) {
+                state.scan_windows();
+            }
+            if let Some(off) = SCREEN_POWER.take() {
+                state.screen_power(off);
+            }
+        }
+
+        for h in hooks {
+            UnhookWinEvent(h);
         }
 
         for name in state.windows.keys().cloned().collect::<Vec<_>>() {
@@ -442,7 +546,90 @@ impl State {
     unsafe fn clear(&mut self, name: &str) {
         self.frames.remove(name);
         self.videos.remove(name);
+        self.paused.remove(name);
         self.destroy_window(name);
+    }
+
+    /// Pausa o reanuda el video de un monitor (y lo recuerda para un video nuevo).
+    fn set_paused(&mut self, name: &str, paused: bool) {
+        if paused {
+            self.paused.insert(name.to_string());
+        } else {
+            self.paused.remove(name);
+        }
+        if let Some(live) = self.players.get(name) {
+            if live.player.set_paused(paused).is_err() {
+                tracing::warn!(output = name, "mpv did not take the pause");
+            }
+        }
+    }
+
+    /// Velocidad, brillo y límite para todos los reproductores, y los que vengan.
+    fn set_playback(&mut self, p: PlaybackSettings) {
+        if self.playback == p {
+            return;
+        }
+        self.playback = p;
+        for (name, live) in &self.players {
+            if !live.player.set_playback(&p) {
+                tracing::warn!(output = %name, "mpv did not take every playback setting");
+            }
+        }
+        tracing::info!(
+            speed = p.speed,
+            brightness = p.brightness,
+            fps_limit = p.fps_limit,
+            "video playback settings"
+        );
+    }
+
+    /// La pantalla se apagó o se encendió: Windows lo dice para todas a la vez.
+    fn screen_power(&mut self, off: bool) {
+        if self.screen_off == off {
+            return;
+        }
+        self.screen_off = off;
+        tracing::info!(off, "screen power");
+        for m in &self.monitors {
+            (self.events)(SurfaceEvent::ScreenPower {
+                output: m.name.clone(),
+                off,
+            });
+        }
+    }
+
+    /// Lee las ventanas de primer nivel y avisa los monitores cuyo fondo quedó tapado o
+    /// destapado (pantalla completa o maximizada, regla en `layout::covered`).
+    unsafe fn scan_windows(&mut self) {
+        let mut list: Vec<TopWindow> = Vec::new();
+        EnumWindows(Some(collect_window), &mut list as *mut _ as LPARAM);
+        // Un juego en pantalla completa exclusiva (Direct3D): el monitor de la ventana del frente.
+        let mut quns = 0;
+        let d3d = if SHQueryUserNotificationState(&mut quns) == 0
+            && quns == QUNS_RUNNING_D3D_FULL_SCREEN
+        {
+            let fg = GetForegroundWindow();
+            window_rect(fg)
+                .and_then(|r| monitor_of(r, &self.monitors))
+                .map(|m| m.name.clone())
+        } else {
+            None
+        };
+        let now = covered(&list, &self.monitors, d3d.as_deref());
+        for m in &self.monitors {
+            let new = now.get(&m.name).copied().unwrap_or_default();
+            let old = self.covers.get(&m.name).copied().unwrap_or_default();
+            if new != old {
+                tracing::debug!(output = %m.name, fullscreen = new.fullscreen,
+                    maximized = new.maximized, "windows over the wallpaper");
+                (self.events)(SurfaceEvent::Covered {
+                    output: m.name.clone(),
+                    fullscreen: new.fullscreen,
+                    maximized: new.maximized,
+                });
+            }
+        }
+        self.covers = now;
     }
 
     unsafe fn destroy_window(&mut self, name: &str) {
@@ -507,6 +694,12 @@ impl State {
         if let Err(e) = player.load(&key.0, VIDEO_LOAD_TIMEOUT) {
             self.close_player(player);
             return Err(e.as_str());
+        }
+        if !self.playback.is_default() && !player.set_playback(&self.playback) {
+            tracing::warn!(output = name, "mpv did not take every playback setting");
+        }
+        if self.paused.contains(name) {
+            let _ = player.set_paused(true);
         }
         let old = match self.players.remove(name) {
             Some(prev) => {
@@ -792,6 +985,9 @@ impl State {
         for event in diff(&old, &new) {
             (self.events)(event);
         }
+        self.covers
+            .retain(|name, _| self.monitors.iter().any(|m| &m.name == name));
+        self.scan_windows();
     }
 
     /// Explorer se reinició: sus ventanas (y las nuestras, hijas de ellas) ya no existen.
@@ -972,9 +1168,24 @@ unsafe extern "system" fn watch_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARA
                 TIMER_DISPLAY => DISPLAY_DIRTY.set(true),
                 TIMER_EXPLORER => EXPLORER_RESTARTED.set(true),
                 TIMER_VIDEO_SWAP => VIDEO_SWAP_DUE.set(true),
+                TIMER_WINDOWS => {
+                    WINDOWS_PENDING.set(false);
+                    WINDOWS_DIRTY.set(true);
+                }
                 _ => {}
             }
             0
+        }
+        WM_POWERBROADCAST if wp as u32 == PBT_POWERSETTINGCHANGE && lp != 0 => {
+            let setting = &*(lp as *const POWERBROADCAST_SETTING);
+            if setting.DataLength >= 4
+                && guid_eq(&setting.PowerSetting, &GUID_SESSION_DISPLAY_STATUS)
+            {
+                // 0 = apagada, 1 = encendida, 2 = atenuada (cuenta como encendida).
+                let value = std::ptr::read_unaligned(setting.Data.as_ptr().cast::<u32>());
+                SCREEN_POWER.set(Some(value == 0));
+            }
+            1
         }
         m if m != 0 && m == TASKBAR_CREATED.get() => {
             SetTimer(hwnd, TIMER_EXPLORER, 1000, None);
@@ -982,6 +1193,109 @@ unsafe extern "system" fn watch_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARA
         }
         _ => DefWindowProcW(hwnd, msg, wp, lp),
     }
+}
+
+/// Aviso de Windows de que cambió una ventana. Solo cuentan las ventanas de primer nivel;
+/// se pone un temporizador corto (si no hay uno) y la lista se lee al cumplirse.
+unsafe extern "system" fn window_event(
+    _hook: HWINEVENTHOOK,
+    _event: u32,
+    hwnd: HWND,
+    id_object: i32,
+    id_child: i32,
+    _thread: u32,
+    _time: u32,
+) {
+    if hwnd.is_null() || id_object != OBJID_WINDOW || id_child != CHILDID_SELF as i32 {
+        return;
+    }
+    if GetAncestor(hwnd, GA_ROOT) != hwnd {
+        return;
+    }
+    if !WINDOWS_PENDING.replace(true) {
+        SetTimer(WATCHER.get() as HWND, TIMER_WINDOWS, WINDOWS_DELAY_MS, None);
+    }
+}
+
+/// Clases que nunca tapan el fondo: el escritorio, la barra de tareas y sus partes.
+const SHELL_CLASSES: &[&str] = &[
+    "Progman",
+    "WorkerW",
+    "Shell_TrayWnd",
+    "Shell_SecondaryTrayWnd",
+];
+
+/// Junta las ventanas de primer nivel que cuentan para tapar el fondo.
+unsafe extern "system" fn collect_window(hwnd: HWND, data: LPARAM) -> i32 {
+    let list = &mut *(data as *mut Vec<TopWindow>);
+    if IsWindowVisible(hwnd) == 0 {
+        return 1;
+    }
+    // En otro escritorio virtual, o una app de la tienda suspendida.
+    let mut cloaked: u32 = 0;
+    if DwmGetWindowAttribute(
+        hwnd,
+        DWMWA_CLOAKED as u32,
+        &mut cloaked as *mut u32 as *mut _,
+        4,
+    ) == 0
+        && cloaked != 0
+    {
+        return 1;
+    }
+    // Herramientas, capas transparentes que dejan pasar los clics (superposiciones de juegos
+    // o de grabación) y ventanas que no se pueden activar.
+    let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
+    if ex & (WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE) != 0 {
+        return 1;
+    }
+    let mut pid = 0u32;
+    GetWindowThreadProcessId(hwnd, &mut pid);
+    if pid == GetCurrentProcessId() {
+        return 1;
+    }
+    let mut class = [0u16; 64];
+    let n = GetClassNameW(hwnd, class.as_mut_ptr(), class.len() as i32);
+    if n > 0 {
+        let name = String::from_utf16_lossy(&class[..n as usize]);
+        if SHELL_CLASSES.contains(&name.as_str()) {
+            return 1;
+        }
+    }
+    let Some(rect) = window_rect(hwnd) else {
+        return 1;
+    };
+    if rect.right <= rect.left || rect.bottom <= rect.top {
+        return 1;
+    }
+    list.push(TopWindow {
+        rect,
+        maximized: IsZoomed(hwnd) != 0,
+        minimized: IsIconic(hwnd) != 0,
+    });
+    1
+}
+
+/// Borde visible de una ventana (sin la sombra de Windows 10/11); si DWM no lo da, el de
+/// `GetWindowRect`.
+unsafe fn window_rect(hwnd: HWND) -> Option<PxRect> {
+    if hwnd.is_null() {
+        return None;
+    }
+    let mut r: RECT = std::mem::zeroed();
+    let ok = DwmGetWindowAttribute(
+        hwnd,
+        DWMWA_EXTENDED_FRAME_BOUNDS as u32,
+        &mut r as *mut RECT as *mut _,
+        std::mem::size_of::<RECT>() as u32,
+    ) == 0
+        || GetWindowRect(hwnd, &mut r) != 0;
+    ok.then_some(PxRect {
+        left: r.left,
+        top: r.top,
+        right: r.right,
+        bottom: r.bottom,
+    })
 }
 
 fn wide(s: &str) -> Vec<u16> {

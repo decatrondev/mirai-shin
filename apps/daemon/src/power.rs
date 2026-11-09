@@ -3,7 +3,8 @@
 //! En Linux lo dice UPower por el bus de sistema (`OnBattery`, avisa sus cambios con
 //! `PropertiesChanged`). En el Flatpak hace falta `--system-talk-name=org.freedesktop.UPower`.
 //! Si no hay UPower o falta el permiso, no es un error: el estado queda «no disponible» y
-//! el video no se pausa por batería. En Windows llega en el 3.6.
+//! el video no se pausa por batería. En Windows lo avisa el sistema (`GUID_ACDC_POWER_SOURCE`;
+//! el ahorro de batería cuenta como batería).
 
 use std::sync::Arc;
 
@@ -43,12 +44,23 @@ pub type PowerSink = Arc<dyn Fn(PowerState) + Send + Sync>;
 /// propia que guarda el `sink` para mandarle estados a mano.
 pub type PowerFactory = Box<dyn FnOnce(PowerSink) + Send>;
 
-/// La de este equipo: UPower en Linux, nada en los demás (queda «no disponible»).
+/// La de este equipo: UPower en Linux, los avisos de energía de Windows (fase 3.6), nada en
+/// los demás (queda «no disponible»).
 pub fn system() -> PowerFactory {
     Box::new(|sink| {
         #[cfg(target_os = "linux")]
         upower::start(None, sink);
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(windows)]
+        {
+            let s = sink.clone();
+            let started = miraishin_surface_windows::signals::watch_power(Box::new(move |b| {
+                s(PowerState::from_on_battery(b))
+            }));
+            if !started {
+                sink(PowerState::Unavailable);
+            }
+        }
+        #[cfg(not(any(target_os = "linux", windows)))]
         sink(PowerState::Unavailable);
     })
 }
