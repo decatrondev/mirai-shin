@@ -63,6 +63,24 @@ async function send(d: Draft, lang: string, website: string): Promise<{ id: stri
   return d.sent ? null : res.json()
 }
 
+const nameOk = (n: string) => { const l = n.trim().length; return l >= 2 && l <= 60 }
+/** Si el paso ya tiene alguna respuesta (para marcarlo en la lista). */
+function answered(s: Step, d: Draft): boolean {
+  const a = d.answers
+  switch (s) {
+    case 'intro': return nameOk(d.name)
+    case 'personality': return Object.keys(a.personality).length > 0
+    case 'words': return a.words.length > 0
+    case 'symbols': return a.symbols.length > 0
+    case 'logoType': return !!a.logoType
+    case 'styles': return Object.keys(a.styles).length > 0
+    case 'palette': return !!a.palette
+    case 'small': return !!a.small
+    case 'free': return !!(a.avoid.trim() || a.comment.trim())
+    case 'review': return !!d.sent
+  }
+}
+
 const toggle = (list: string[], v: string, max: number) =>
   list.includes(v) ? list.filter(x => x !== v) : list.length < max ? [...list, v] : list
 
@@ -112,22 +130,41 @@ export default function MarcaApp() {
   return (
     <div className="mk">
       <header className="mk-top">
+        <div className="mk-top-in">
         <span className="mk-brand"><span className="mk-kanji" aria-hidden="true">芯</span>{brand.name}</span>
         <span className="mk-top-actions">
           <button type="button" className="mk-flat" lang={lang === 'es' ? 'en' : 'es'} onClick={() => setLang(lang === 'es' ? 'en' : 'es')}>{t('top.lang')}</button>
           <button type="button" className="mk-flat" onClick={toggleTheme}>{t(theme === 'dark' ? 'top.toLight' : 'top.toDark')}</button>
         </span>
+        </div>
       </header>
 
-      <main className="mk-main">
-        {d.step > 0 && !d.done && (
-          <div className="mk-progress">
-            <span>{t('top.step', { n: d.step, total: TOTAL })}</span>
-            <div className="mk-bar" role="progressbar" aria-valuemin={1} aria-valuemax={TOTAL} aria-valuenow={d.step} aria-label={t('top.step', { n: d.step, total: TOTAL })}>
-              <i style={{ width: `${(d.step / TOTAL) * 100}%` }} />
-            </div>
+      <div className="mk-layout">
+      <aside className="mk-aside" aria-label={t('steps.label')}>
+        <div className="mk-progress">
+          <span>{d.step > 0 && !d.done ? t('top.step', { n: d.step, total: TOTAL }) : t('steps.label')}</span>
+          <div className="mk-bar" role="progressbar" aria-valuemin={0} aria-valuemax={TOTAL} aria-valuenow={d.done ? TOTAL : d.step} aria-label={t('top.step', { n: d.done ? TOTAL : d.step, total: TOTAL })}>
+            <i style={{ width: `${((d.done ? TOTAL : d.step) / TOTAL) * 100}%` }} />
           </div>
-        )}
+        </div>
+        <ol className="mk-steps">
+          {STEPS.map((s, i) => {
+            const current = !d.done && d.step === i, ok = answered(s, d)
+            return (
+              <li key={s}>
+                <button type="button" className="mk-stepbtn" aria-current={current ? 'step' : undefined} disabled={!nameOk(d.name) && i > 0}
+                  onClick={() => go(i)}>
+                  <span className={ok ? 'mk-tick is-ok' : 'mk-tick'} aria-hidden="true">{ok ? '✓' : i === 0 ? '·' : i}</span>
+                  <span>{t(`steps.${s}`)}</span>
+                  {ok && <span className="mk-sr">, {t('steps.answered')}</span>}
+                </button>
+              </li>
+            )
+          })}
+        </ol>
+      </aside>
+
+      <main className="mk-main">
 
         {d.done ? (
           <Done name={d.name} notice={notice} headRef={head} onEdit={() => go(1)} />
@@ -300,6 +337,7 @@ export default function MarcaApp() {
           </section>
         )}
       </main>
+      </div>
     </div>
   )
 }

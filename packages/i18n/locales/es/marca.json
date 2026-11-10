@@ -1,7 +1,23 @@
 {
-  "meta": { "title": "Crea el logo de {{brand}}" },
-  "top": { "lang": "English", "toLight": "Tema claro", "toDark": "Tema oscuro", "step": "Paso {{n}} de {{total}}" },
-  "nav": { "back": "Atrás", "next": "Siguiente", "skip": "Saltar esta pregunta", "review": "Revisar y enviar", "send": "Enviar respuestas", "sending": "Enviando…", "save": "Guardar cambios", "change": "Cambiar" },
+  "meta": {
+    "title": "Crea el logo de {{brand}}"
+  },
+  "top": {
+    "lang": "English",
+    "toLight": "Tema claro",
+    "toDark": "Tema oscuro",
+    "step": "Paso {{n}} de {{total}}"
+  },
+  "nav": {
+    "back": "Atrás",
+    "next": "Siguiente",
+    "skip": "Saltar esta pregunta",
+    "review": "Revisar y enviar",
+    "send": "Enviar respuestas",
+    "sending": "Enviando…",
+    "save": "Guardar cambios",
+    "change": "Cambiar"
+  },
   "intro": {
     "title": "Ayúdanos a crear el logo de {{brand}}",
     "lead": "{{brand}} es una app de fondos de pantalla animados para Windows y Linux, que casi no gasta y se pausa sola cuando juegas o trabajas. Le falta su logo, y queremos hacerlo con tu opinión.",
@@ -16,43 +32,104 @@
     "title": "Si {{brand}} fuera una persona…",
     "lead": "Mueve cada punto hacia el lado que más se parezca. El centro es «ni uno ni otro».",
     "axes": {
-      "serio_jugueton": ["Seria", "Juguetona"],
-      "tecnico_artistico": ["Técnica", "Artística"],
-      "simple_detallado": ["Simple", "Con detalle"],
-      "tranquilo_energico": ["Tranquila", "Con energía"],
-      "japones_evidente_sutil": ["Lo japonés se nota", "Lo japonés es sutil"]
+      "serio_jugueton": [
+        "Seria",
+        "Juguetona"
+      ],
+      "tecnico_artistico": [
+        "Técnica",
+        "Artística"
+      ],
+      "simple_detallado": [
+        "Simple",
+        "Con detalle"
+      ],
+      "tranquilo_energico": [
+        "Tranquila",
+        "Con energía"
+      ],
+      "japones_evidente_sutil": [
+        "Lo japonés se nota",
+        "Lo japonés es sutil"
+      ]
     },
-    "pos": ["Mucho más «{{a}}»", "Algo más «{{a}}»", "Ni uno ni otro", "Algo más «{{b}}»", "Mucho más «{{b}}»"]
+    "pos": [
+      "Mucho más «{{a}}»",
+      "Algo más «{{a}}»",
+      "Ni uno ni otro",
+      "Algo más «{{b}}»",
+      "Mucho más «{{b}}»"
+    ]
   },
   "words": {
     "title": "Elige 3 palabras para la marca",
     "lead": "Las que mejor la describan. Puedes elegir menos.",
     "count": "{{n}} de 3",
     "items": {
-      "liviano": "Liviana", "nocturno": "Nocturna", "vivo": "Viva", "tranquilo": "Tranquila", "preciso": "Precisa", "calido": "Cálida",
-      "futurista": "Futurista", "artesanal": "Artesanal", "libre": "Libre", "elegante": "Elegante", "jugueton": "Juguetona", "tecnico": "Técnica"
+      "liviano": "Liviana",
+      "nocturno": "Nocturna",
+      "vivo": "Viva",
+      "tranquilo": "Tranquila",
+      "preciso": "Precisa",
+      "calido": "Cálida",
+      "futurista": "Futurista",
+      "artesanal": "Artesanal",
+      "libre": "Libre",
+      "elegante": "Elegante",
+      "jugueton": "Juguetona",
+      "tecnico": "Técnica"
     }
   },
   "symbols": {
     "title": "¿Qué debería mostrar el logo?",
     "lead": "Elige hasta 2 ideas.",
     "items": {
-      "kanji": ["El kanji 芯", "«Shin»: el centro, la mecha de una vela."],
-      "mecha": ["Una mecha o llama", "Algo pequeño que da luz."],
-      "monitor": ["Una pantalla", "Lo que la app decora."],
-      "onda": ["Una onda", "Movimiento, algo vivo."],
-      "abstracto": ["Una forma abstracta", "Que no represente nada concreto."],
-      "letras": ["Las letras M o MS", "Las iniciales del nombre."]
+      "kanji": [
+        "El kanji 芯",
+        "«Shin»: el centro, la mecha de una vela."
+      ],
+      "mecha": [
+        "Una mecha o llama",
+        "Algo pequeño que da luz."
+      ],
+      "monitor": [
+        "Una pantalla",
+        "Lo que la app decora."
+      ],
+      "onda": [
+        "Una onda",
+        "Movimiento, algo vivo."
+      ],
+      "abstracto": [
+        "Una forma abstracta",
+        "Que no represente nada concreto."
+      ],
+      "letras": [
+        "Las letras M o MS",
+        "Las iniciales del nombre."
+      ]
     }
   },
   "logoType": {
     "title": "¿Qué tipo de logo?",
     "lead": "Elige uno.",
     "items": {
-      "simbolo": ["Solo un símbolo", "Se reconoce sin texto, como un ícono."],
-      "simbolo_nombre": ["Símbolo con el nombre", "El dibujo y el nombre juntos."],
-      "nombre": ["Solo el nombre", "El nombre escrito con una letra propia."],
-      "sello": ["Un sello japonés", "Como un hanko: un sello con el kanji."]
+      "simbolo": [
+        "Solo un símbolo",
+        "Se reconoce sin texto, como un ícono."
+      ],
+      "simbolo_nombre": [
+        "Símbolo con el nombre",
+        "El dibujo y el nombre juntos."
+      ],
+      "nombre": [
+        "Solo el nombre",
+        "El nombre escrito con una letra propia."
+      ],
+      "sello": [
+        "Un sello japonés",
+        "Como un hanko: un sello con el kanji."
+      ]
     }
   },
   "styles": {
@@ -60,29 +137,63 @@
     "lead": "En cada fila, elige el de la izquierda o el de la derecha. Son dibujos de ejemplo, no el logo.",
     "same": "Me da igual",
     "pairs": {
-      "geometrico_pincel": ["Geométrico", "Trazo de pincel"],
-      "fina_rellena": ["Línea fina", "Relleno"],
-      "plano_volumen": ["Plano", "Con volumen"],
-      "redondo_anguloso": ["Redondeado", "Anguloso"],
-      "simetrico_organico": ["Simétrico", "Orgánico"]
+      "geometrico_pincel": [
+        "Geométrico",
+        "Trazo de pincel"
+      ],
+      "fina_rellena": [
+        "Línea fina",
+        "Relleno"
+      ],
+      "plano_volumen": [
+        "Plano",
+        "Con volumen"
+      ],
+      "redondo_anguloso": [
+        "Redondeado",
+        "Anguloso"
+      ],
+      "simetrico_organico": [
+        "Simétrico",
+        "Orgánico"
+      ]
     }
   },
   "palette": {
     "title": "¿Con qué colores?",
     "lead": "Elige la paleta que mejor le quede. La primera es la que usa hoy la página.",
     "items": {
-      "actual": ["Grafito y verde agua", "La de la página y la app hoy."],
-      "hora_azul": ["Hora azul", "Antes del amanecer: azul tinta y violeta."],
-      "sello": ["Papel y bermellón", "Como un sello japonés sobre papel."],
-      "amanecer": ["Noche y ámbar", "Azul profundo con una luz cálida."],
-      "mono": ["Blanco y negro", "Sin color: el color lo ponen los fondos."]
+      "actual": [
+        "Grafito y verde agua",
+        "La de la página y la app hoy."
+      ],
+      "hora_azul": [
+        "Hora azul",
+        "Antes del amanecer: azul tinta y violeta."
+      ],
+      "sello": [
+        "Papel y bermellón",
+        "Como un sello japonés sobre papel."
+      ],
+      "amanecer": [
+        "Noche y ámbar",
+        "Azul profundo con una luz cálida."
+      ],
+      "mono": [
+        "Blanco y negro",
+        "Sin color: el color lo ponen los fondos."
+      ]
     }
   },
   "small": {
     "title": "¿Cuál se entiende mejor en chico?",
     "lead": "El logo también va en la barra de tareas y en la bandeja del sistema, donde mide 16 píxeles. Mira los tres ejemplos en su tamaño real.",
     "taskbar": "Así se ven en una barra de tareas",
-    "items": { "simple": "Simple", "medio": "Intermedio", "detallado": "Detallado" }
+    "items": {
+      "simple": "Simple",
+      "medio": "Intermedio",
+      "detallado": "Detallado"
+    }
   },
   "free": {
     "title": "Para terminar",
@@ -111,5 +222,19 @@
     "not_found": "No encontramos tu respuesta anterior. Envíala como nueva.",
     "network": "No hay conexión con el servidor. Revisa tu internet e inténtalo otra vez.",
     "generic": "No se pudo enviar. Inténtalo otra vez en un momento."
+  },
+  "steps": {
+    "label": "Pasos",
+    "intro": "Tu nombre",
+    "personality": "Personalidad",
+    "words": "Palabras",
+    "symbols": "Qué muestra",
+    "logoType": "Tipo de logo",
+    "styles": "Estilos",
+    "palette": "Colores",
+    "small": "En tamaño chico",
+    "free": "Para terminar",
+    "review": "Revisar y enviar",
+    "answered": "respondido"
   }
 }

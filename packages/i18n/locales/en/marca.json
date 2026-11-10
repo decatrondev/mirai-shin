@@ -1,7 +1,23 @@
 {
-  "meta": { "title": "Create the {{brand}} logo" },
-  "top": { "lang": "Español", "toLight": "Light theme", "toDark": "Dark theme", "step": "Step {{n}} of {{total}}" },
-  "nav": { "back": "Back", "next": "Next", "skip": "Skip this question", "review": "Review and send", "send": "Send answers", "sending": "Sending…", "save": "Save changes", "change": "Change" },
+  "meta": {
+    "title": "Create the {{brand}} logo"
+  },
+  "top": {
+    "lang": "Español",
+    "toLight": "Light theme",
+    "toDark": "Dark theme",
+    "step": "Step {{n}} of {{total}}"
+  },
+  "nav": {
+    "back": "Back",
+    "next": "Next",
+    "skip": "Skip this question",
+    "review": "Review and send",
+    "send": "Send answers",
+    "sending": "Sending…",
+    "save": "Save changes",
+    "change": "Change"
+  },
   "intro": {
     "title": "Help us create the {{brand}} logo",
     "lead": "{{brand}} is an animated wallpaper app for Windows and Linux that barely uses any resources and pauses itself while you play or work. It still needs a logo, and we want to make it with your input.",
@@ -16,43 +32,104 @@
     "title": "If {{brand}} were a person…",
     "lead": "Move each point toward the side that fits best. The middle means \"neither\".",
     "axes": {
-      "serio_jugueton": ["Serious", "Playful"],
-      "tecnico_artistico": ["Technical", "Artistic"],
-      "simple_detallado": ["Simple", "Detailed"],
-      "tranquilo_energico": ["Calm", "Energetic"],
-      "japones_evidente_sutil": ["Clearly Japanese", "Subtly Japanese"]
+      "serio_jugueton": [
+        "Serious",
+        "Playful"
+      ],
+      "tecnico_artistico": [
+        "Technical",
+        "Artistic"
+      ],
+      "simple_detallado": [
+        "Simple",
+        "Detailed"
+      ],
+      "tranquilo_energico": [
+        "Calm",
+        "Energetic"
+      ],
+      "japones_evidente_sutil": [
+        "Clearly Japanese",
+        "Subtly Japanese"
+      ]
     },
-    "pos": ["Much more \"{{a}}\"", "Somewhat more \"{{a}}\"", "Neither", "Somewhat more \"{{b}}\"", "Much more \"{{b}}\""]
+    "pos": [
+      "Much more \"{{a}}\"",
+      "Somewhat more \"{{a}}\"",
+      "Neither",
+      "Somewhat more \"{{b}}\"",
+      "Much more \"{{b}}\""
+    ]
   },
   "words": {
     "title": "Pick 3 words for the brand",
     "lead": "The ones that describe it best. You can pick fewer.",
     "count": "{{n}} of 3",
     "items": {
-      "liviano": "Light", "nocturno": "Nocturnal", "vivo": "Alive", "tranquilo": "Calm", "preciso": "Precise", "calido": "Warm",
-      "futurista": "Futuristic", "artesanal": "Handcrafted", "libre": "Free", "elegante": "Elegant", "jugueton": "Playful", "tecnico": "Technical"
+      "liviano": "Light",
+      "nocturno": "Nocturnal",
+      "vivo": "Alive",
+      "tranquilo": "Calm",
+      "preciso": "Precise",
+      "calido": "Warm",
+      "futurista": "Futuristic",
+      "artesanal": "Handcrafted",
+      "libre": "Free",
+      "elegante": "Elegant",
+      "jugueton": "Playful",
+      "tecnico": "Technical"
     }
   },
   "symbols": {
     "title": "What should the logo show?",
     "lead": "Pick up to 2 ideas.",
     "items": {
-      "kanji": ["The kanji 芯", "\"Shin\": the core, the wick of a candle."],
-      "mecha": ["A wick or flame", "Something small that gives light."],
-      "monitor": ["A screen", "What the app decorates."],
-      "onda": ["A wave", "Motion, something alive."],
-      "abstracto": ["An abstract shape", "Nothing concrete."],
-      "letras": ["The letters M or MS", "The initials of the name."]
+      "kanji": [
+        "The kanji 芯",
+        "\"Shin\": the core, the wick of a candle."
+      ],
+      "mecha": [
+        "A wick or flame",
+        "Something small that gives light."
+      ],
+      "monitor": [
+        "A screen",
+        "What the app decorates."
+      ],
+      "onda": [
+        "A wave",
+        "Motion, something alive."
+      ],
+      "abstracto": [
+        "An abstract shape",
+        "Nothing concrete."
+      ],
+      "letras": [
+        "The letters M or MS",
+        "The initials of the name."
+      ]
     }
   },
   "logoType": {
     "title": "What kind of logo?",
     "lead": "Pick one.",
     "items": {
-      "simbolo": ["Symbol only", "Recognizable without text, like an icon."],
-      "simbolo_nombre": ["Symbol with the name", "The mark and the name together."],
-      "nombre": ["Name only", "The name set in its own lettering."],
-      "sello": ["A Japanese seal", "Like a hanko: a stamp with the kanji."]
+      "simbolo": [
+        "Symbol only",
+        "Recognizable without text, like an icon."
+      ],
+      "simbolo_nombre": [
+        "Symbol with the name",
+        "The mark and the name together."
+      ],
+      "nombre": [
+        "Name only",
+        "The name set in its own lettering."
+      ],
+      "sello": [
+        "A Japanese seal",
+        "Like a hanko: a stamp with the kanji."
+      ]
     }
   },
   "styles": {
@@ -60,29 +137,63 @@
     "lead": "In each row, pick the left or the right one. These are sample drawings, not the logo.",
     "same": "No preference",
     "pairs": {
-      "geometrico_pincel": ["Geometric", "Brush stroke"],
-      "fina_rellena": ["Thin line", "Filled"],
-      "plano_volumen": ["Flat", "With depth"],
-      "redondo_anguloso": ["Rounded", "Angular"],
-      "simetrico_organico": ["Symmetric", "Organic"]
+      "geometrico_pincel": [
+        "Geometric",
+        "Brush stroke"
+      ],
+      "fina_rellena": [
+        "Thin line",
+        "Filled"
+      ],
+      "plano_volumen": [
+        "Flat",
+        "With depth"
+      ],
+      "redondo_anguloso": [
+        "Rounded",
+        "Angular"
+      ],
+      "simetrico_organico": [
+        "Symmetric",
+        "Organic"
+      ]
     }
   },
   "palette": {
     "title": "Which colors?",
     "lead": "Pick the palette that suits it best. The first one is what the site uses today.",
     "items": {
-      "actual": ["Graphite and teal", "What the site and the app use today."],
-      "hora_azul": ["Blue hour", "Before dawn: ink blue and violet."],
-      "sello": ["Paper and vermilion", "Like a Japanese seal on paper."],
-      "amanecer": ["Night and amber", "Deep blue with a warm light."],
-      "mono": ["Black and white", "No color: the wallpapers bring it."]
+      "actual": [
+        "Graphite and teal",
+        "What the site and the app use today."
+      ],
+      "hora_azul": [
+        "Blue hour",
+        "Before dawn: ink blue and violet."
+      ],
+      "sello": [
+        "Paper and vermilion",
+        "Like a Japanese seal on paper."
+      ],
+      "amanecer": [
+        "Night and amber",
+        "Deep blue with a warm light."
+      ],
+      "mono": [
+        "Black and white",
+        "No color: the wallpapers bring it."
+      ]
     }
   },
   "small": {
     "title": "Which one reads best when small?",
     "lead": "The logo also goes in the taskbar and the system tray, where it is 16 pixels wide. Look at the three samples at their real size.",
     "taskbar": "How they look in a taskbar",
-    "items": { "simple": "Simple", "medio": "In between", "detallado": "Detailed" }
+    "items": {
+      "simple": "Simple",
+      "medio": "In between",
+      "detallado": "Detailed"
+    }
   },
   "free": {
     "title": "To finish",
@@ -111,5 +222,19 @@
     "not_found": "We couldn't find your previous answer. Send it as a new one.",
     "network": "Can't reach the server. Check your internet and try again.",
     "generic": "Couldn't send. Try again in a moment."
+  },
+  "steps": {
+    "label": "Steps",
+    "intro": "Your name",
+    "personality": "Personality",
+    "words": "Words",
+    "symbols": "What it shows",
+    "logoType": "Logo type",
+    "styles": "Styles",
+    "palette": "Colors",
+    "small": "At small size",
+    "free": "To finish",
+    "review": "Review and send",
+    "answered": "answered"
   }
 }
