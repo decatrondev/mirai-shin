@@ -10,6 +10,7 @@ import { Guide } from './Guide'
 import { DocView } from './DocView'
 import { Search } from './Search'
 import { Users } from './Users'
+import { Survey } from './Survey'
 import { Account } from './Account'
 import { applyTheme, currentTheme, type Theme } from '../theme'
 import './admin.css'
@@ -43,6 +44,7 @@ function Gate({ theme, onToggleTheme }: { theme: Theme; onToggleTheme: () => voi
         <Route path="doc/*" element={<DocView />} />
         <Route path="search" element={<Search />} />
         <Route path="users" element={user.role === 'SUPERADMIN' ? <Users /> : <Navigate to="/admin" replace />} />
+        <Route path="survey" element={user.role === 'VIEWER' ? <Navigate to="/admin" replace /> : <Survey />} />
         <Route path="account" element={<Account />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Route>

@@ -8,6 +8,8 @@ pub struct AppState {
     pub jwt_secret: String,
     pub docs_root: PathBuf,
     pub limiter: Arc<LoginLimiter>,
+    /// Envíos de la encuesta pública por IP (mismo tope y ventana que los logins fallidos).
+    pub survey_limiter: Arc<LoginLimiter>,
 }
 
 impl AppState {
@@ -25,6 +27,7 @@ impl AppState {
             jwt_secret,
             docs_root,
             limiter: Arc::new(LoginLimiter::default()),
+            survey_limiter: Arc::new(LoginLimiter::default()),
         })
     }
 }

@@ -212,7 +212,7 @@ fn issue_token(state: &AppState, id: Uuid, changed_at: DateTime<Utc>) -> ApiResu
 }
 
 /// IP real del visitante: nginx la pasa en `X-Real-IP` (sale de `CF-Connecting-IP`).
-fn client_ip(headers: &HeaderMap) -> String {
+pub fn client_ip(headers: &HeaderMap) -> String {
     headers
         .get("x-real-ip")
         .and_then(|v| v.to_str().ok())

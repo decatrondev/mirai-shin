@@ -1,7 +1,8 @@
 //! `miraishin-web`: API JSON del panel `/admin` de la landing.
 //!
 //! La landing es un build estático que sirve nginx; este binario solo responde
-//! `/api/*`. Tiene una tabla (`admin_users`) y lee los documentos internos en
+//! `/api/*`. Tiene las tablas `admin_users` y `survey_responses` (encuesta
+//! pública de la marca) y lee los documentos internos en
 //! Markdown desde `DOCS_ROOT`, filtrados por el rol de quien pide.
 //!
 //! Subcomandos para el servidor (claves temporales por la salida estándar):
@@ -16,6 +17,7 @@ mod docs;
 mod error;
 mod limiter;
 mod state;
+mod survey;
 mod users;
 
 use axum::{routing::get, Json, Router};
@@ -38,6 +40,7 @@ async fn main() -> anyhow::Result<()> {
         .nest("/api/auth", auth::router())
         .nest("/api/docs", docs::router())
         .nest("/api/users", users::router())
+        .nest("/api/survey", survey::router())
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 

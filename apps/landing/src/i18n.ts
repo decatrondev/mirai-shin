@@ -1,6 +1,6 @@
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
-import { LANGS, admin, landing, type Lang } from '@mirai-shin/i18n'
+import { LANGS, admin, landing, marca, type Lang } from '@mirai-shin/i18n'
 import brand from '@brand'
 
 function initial(): Lang {
@@ -12,10 +12,10 @@ function initial(): Lang {
 }
 
 i18n.use(initReactI18next).init({
-  // `translation` = la landing; `admin` = el panel.
+  // `translation` = la landing; `admin` = el panel; `marca` = la encuesta de la marca.
   resources: {
-    es: { translation: landing.es, admin: admin.es },
-    en: { translation: landing.en, admin: admin.en },
+    es: { translation: landing.es, admin: admin.es, marca: marca.es },
+    en: { translation: landing.en, admin: admin.en, marca: marca.en },
   },
   lng: initial(),
   fallbackLng: 'es',

@@ -30,7 +30,8 @@
     "index": "Index",
     "close": "Close index",
     "logout": "Sign out",
-    "site": "View the site"
+    "site": "View the site",
+    "survey": "Brand survey"
   },
   "status": {
     "updated": "Updated {{when}}",
@@ -114,5 +115,33 @@
     "invalid_query": "Search must be between 2 and 100 characters.",
     "network": "Can't reach the server. Check your connection and try again.",
     "generic": "Something failed on the server. Try again in a moment."
+  },
+  "survey": {
+    "title": "Brand survey",
+    "intro": "Answers from the public survey for creating the logo. Link to share:",
+    "count_one": "answer",
+    "count_other": "answers",
+    "empty": "No answers yet. Share the link above.",
+    "csv": "Download CSV",
+    "json": "Download JSON",
+    "summary": "Summary",
+    "people": "Answers by person",
+    "name": "Name",
+    "date": "Date",
+    "actions": "Actions",
+    "show": "Show",
+    "hide": "Hide",
+    "remove": "Remove",
+    "confirmRemove": "Remove {{name}}'s answer? This can't be undone.",
+    "edited": "changed on {{date}}",
+    "avg": "average {{value}}",
+    "axisHelp": "Each column counts how many chose \"much\", \"somewhat\", \"neither\", \"somewhat\" or \"much\" toward each side. The average goes from -2 (left) to 2 (right).",
+    "distLabel": "{{left}} to {{right}}: {{values}} ({{n}} answers)",
+    "left": "Left",
+    "right": "Right",
+    "ofTotal": "{{n}} of {{total}} people",
+    "noTexts": "Nobody has written anything yet.",
+    "avoid": "Avoid:",
+    "comment": "Comment:"
   }
 }

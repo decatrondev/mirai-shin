@@ -139,3 +139,42 @@ body { padding-bottom: 0; }
   .adm-status-right { margin-left: 0; justify-content: flex-start; }
 }
 @media (prefers-reduced-motion: reduce) { .adm-side { transition: none; } }
+
+/* ---------- encuesta de la marca ---------- */
+.sv-total { font-size: 1.1rem; margin: 8px 0 4px; }
+.sv-total b { font: 700 2rem/1 var(--head); font-stretch: 78%; margin-right: 6px; }
+.sv-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.sv h3 { margin-top: 2em; }
+.sv .sv-bars { list-style: none; padding: 0; margin: 0 0 1em; display: grid; gap: 6px; max-width: 640px; }
+.sv-bars li { display: grid; grid-template-columns: minmax(120px, 220px) 1fr 3ch; align-items: center; gap: 12px; font-size: .95rem; }
+.sv-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-track { height: 12px; }
+.sv-track i { display: block; height: 100%; min-width: 2px; background: var(--accent); border-radius: 0 4px 4px 0; }
+.sv-n { text-align: right; font-variant-numeric: tabular-nums; color: var(--fg); }
+.sv-axes { display: grid; gap: 4px; max-width: 760px; }
+.sv-axis { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) 11ch; align-items: end; gap: 14px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: .95rem; }
+.sv-axis-l { text-align: right; align-self: center; }
+.sv-axis-r, .sv-avg { align-self: center; }
+.sv-avg { color: var(--muted); font-size: .85rem; }
+.sv-dist { display: flex; gap: 4px; height: 52px; align-items: flex-end; }
+.sv-col { width: 26px; height: 100%; display: grid; grid-template-rows: 1fr auto; justify-items: center; gap: 2px; }
+.sv-col i { align-self: end; width: 100%; min-height: 2px; background: var(--accent); border-radius: 4px 4px 0 0; }
+.sv-col small { font-size: .72rem; color: var(--muted); line-height: 1; font-variant-numeric: tabular-nums; }
+.sv-foot { font-size: .85rem; margin-top: 8px; }
+.sv-win { color: var(--fg); font-weight: 600; }
+.sv .sv-texts { list-style: none; padding: 0; display: grid; gap: 12px; }
+.sv-texts li { border-left: 2px solid var(--line); padding-left: 12px; }
+.sv-texts p { margin: 2px 0; white-space: pre-wrap; }
+.sv-row-actions { white-space: nowrap; text-align: right; }
+.sv-detail td { background: var(--win-bar); }
+.sv-detail dl { display: grid; grid-template-columns: minmax(160px, auto) 1fr; gap: 4px 16px; margin: 0; font-size: .9rem; }
+.sv-detail dt { color: var(--muted); }
+.sv-detail dd { margin: 0; }
+@media (max-width: 640px) {
+  .sv-axis { grid-template-columns: 1fr 1fr; }
+  .sv-axis-l { text-align: left; } .sv-axis-r { text-align: right; }
+  .sv-dist { grid-column: 1 / -1; grid-row: 2; justify-content: center; }
+  .sv-avg { grid-column: 1 / -1; }
+  .sv-bars li { grid-template-columns: minmax(90px, 40%) 1fr 3ch; }
+  .sv-detail dl { grid-template-columns: 1fr; }
+}

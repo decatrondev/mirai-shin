@@ -30,7 +30,8 @@
     "index": "Índice",
     "close": "Cerrar índice",
     "logout": "Salir",
-    "site": "Ver el sitio"
+    "site": "Ver el sitio",
+    "survey": "Encuesta de la marca"
   },
   "status": {
     "updated": "Actualizado {{when}}",
@@ -114,5 +115,33 @@
     "invalid_query": "La búsqueda debe tener entre 2 y 100 caracteres.",
     "network": "No hay conexión con el servidor. Revisa tu internet y vuelve a probar.",
     "generic": "Algo falló en el servidor. Vuelve a probar en un momento."
+  },
+  "survey": {
+    "title": "Encuesta de la marca",
+    "intro": "Respuestas de la encuesta pública para crear el logo. Enlace para compartir:",
+    "count_one": "respuesta",
+    "count_other": "respuestas",
+    "empty": "Todavía no hay respuestas. Comparte el enlace de arriba.",
+    "csv": "Descargar CSV",
+    "json": "Descargar JSON",
+    "summary": "Resumen",
+    "people": "Respuestas por persona",
+    "name": "Nombre",
+    "date": "Fecha",
+    "actions": "Acciones",
+    "show": "Ver",
+    "hide": "Ocultar",
+    "remove": "Quitar",
+    "confirmRemove": "¿Quitar la respuesta de {{name}}? No se puede deshacer.",
+    "edited": "cambiada el {{date}}",
+    "avg": "promedio {{value}}",
+    "axisHelp": "Cada columna cuenta a cuántos les parece «mucho», «algo», «ni uno ni otro», «algo» o «mucho» hacia cada lado. El promedio va de -2 (izquierda) a 2 (derecha).",
+    "distLabel": "{{left}} a {{right}}: {{values}} ({{n}} respuestas)",
+    "left": "Izquierda",
+    "right": "Derecha",
+    "ofTotal": "{{n}} de {{total}} personas",
+    "noTexts": "Nadie escribió nada todavía.",
+    "avoid": "Evitar:",
+    "comment": "Comentario:"
   }
 }

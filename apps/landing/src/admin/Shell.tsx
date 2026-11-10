@@ -57,6 +57,7 @@ export function Shell({ theme, onToggleTheme }: Props) {
               {tree && tree.length === 0 && <p className="adm-note">{t('doc.empty')}</p>}
               {tree && <Tree nodes={tree} />}
               <p className="adm-group adm-group-sep" aria-hidden="true" />
+              {user && user.role !== 'VIEWER' && <NavLink to="/admin/survey" className="adm-link">{t('nav.survey')}</NavLink>}
               {user?.role === 'SUPERADMIN' && <NavLink to="/admin/users" className="adm-link">{t('nav.users')}</NavLink>}
               <NavLink to="/admin/account" className="adm-link">{t('nav.account')}</NavLink>
             </nav>
