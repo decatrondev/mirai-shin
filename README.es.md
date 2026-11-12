@@ -6,7 +6,7 @@ Fondos de pantalla animados para Linux y Windows, pensados para gastar lo mínim
 
 **Estado:** en desarrollo. El plan está cerrado y se está construyendo la base. Todavía no hay nada para descargar.
 
-Sitio: <https://miraishin.decatron.net>
+Sitio: <https://miraishin.net>
 
 ## Qué hará
 

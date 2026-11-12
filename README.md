@@ -6,7 +6,7 @@ Animated wallpapers for Linux and Windows, built to use as little as possible. R
 
 **Status:** in development. The plan is done and the foundation is being built. There is nothing to download yet.
 
-Website: <https://miraishin.decatron.net>
+Website: <https://miraishin.net>
 
 ## What it will do
 
