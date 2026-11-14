@@ -12,7 +12,11 @@ export interface SurveyAnswers {
   personality?: Record<string, number>; words?: string[]; symbols?: string[]; logoType?: string | null
   styles?: Record<string, string>; palette?: string | null; small?: string | null; avoid?: string; comment?: string
 }
-export interface SurveyResponse { id: string; name: string; lang: string; answers: SurveyAnswers; createdAt: string; updatedAt: string }
+export interface UiAnswers {
+  pick?: string; second?: string | null; change?: string; mixFrom?: string | null; mixPart?: string; ratings?: Record<string, number>
+}
+export interface SurveyResponse<A = SurveyAnswers> { id: string; name: string; lang: string; answers: A; createdAt: string; updatedAt: string }
+export type SurveyKind = 'marca' | 'interfaz'
 interface Session { token: string; user: User }
 
 export const MIN_PASSWORD = 12
@@ -64,6 +68,6 @@ export const api = {
     req<{ user: AdminUser; temporaryPassword: string }>('/users', post({ email, role })),
   resetUser: (id: string) => req<{ user: AdminUser; temporaryPassword: string }>(`/users/${id}/reset`, { method: 'POST' }),
   deleteUser: (id: string) => req<{ ok: true }>(`/users/${id}`, { method: 'DELETE' }),
-  surveyResponses: () => req<SurveyResponse[]>('/survey/marca/responses'),
-  deleteSurveyResponse: (id: string) => req<{ ok: true }>(`/survey/marca/responses/${id}`, { method: 'DELETE' }),
+  surveyResponses: <A = SurveyAnswers>(kind: SurveyKind = 'marca') => req<SurveyResponse<A>[]>(`/survey/${kind}/responses`),
+  deleteSurveyResponse: (id: string, kind: SurveyKind = 'marca') => req<{ ok: true }>(`/survey/${kind}/responses/${id}`, { method: 'DELETE' }),
 }

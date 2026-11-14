@@ -1,0 +1,108 @@
+{
+  "meta": {
+    "title": "Choose how the {{brand}} app looks"
+  },
+  "versions": {
+    "letter": "Version {{letter}}",
+    "live": "Try it live",
+    "liveHint": "Opens in another tab. You can click the buttons and pick wallpapers there.",
+    "alt": "Screenshot of version {{letter}}: {{name}}",
+    "items": {
+      "a": ["Pixi's idea", "A thin top bar with the search in the middle. The monitors sit above “Apply”, in the right panel."],
+      "b": ["Desktop to scale", "The right panel shows your monitors as they are arranged. Drag a wallpaper onto a monitor to apply it."],
+      "c": ["Taskbar", "The bottom bar shows your monitors with their wallpaper, and you pick one there. The right panel is only for the wallpaper."],
+      "d": ["Preview inside the monitor", "The wallpaper is shown inside the chosen monitor, with its real shape. You switch monitors below it."],
+      "e": ["Panel on top", "More room for the library: picking a wallpaper opens a panel on top with the monitors and “Apply”."]
+    }
+  },
+  "intro": {
+    "title": "Help us choose how the {{brand}} app looks",
+    "lead": "{{brand}} is an animated wallpaper app for Windows and Linux. We have 5 versions of its window and we want to choose with your opinion.",
+    "how": "Look at the 5 versions (you can open them live) and answer 5 short steps, about 2 minutes. Only picking one is required. If you close the page, you'll pick up where you left off.",
+    "start": "Start",
+    "edit": "You already answered. You can change your answers: they replace the previous ones."
+  },
+  "pick": {
+    "title": "Which one would you choose?",
+    "lead": "The one you'd use every day. If you're torn between two, the other one goes in the next step.",
+    "required": "Pick a version to continue."
+  },
+  "second": {
+    "title": "And your second choice?",
+    "lead": "If the one you chose didn't exist. You can skip this step.",
+    "none": "None"
+  },
+  "change": {
+    "title": "What would you change in version {{letter}}?",
+    "lead": "What doesn't convince you, what's missing or what you'd move. You can leave it empty.",
+    "label": "What you'd change",
+    "count": "{{n}} of {{max}}"
+  },
+  "mix": {
+    "title": "Would you mix in something from another one?",
+    "lead": "For example, “the bottom bar from C”. You can skip this step.",
+    "from": "From which version",
+    "part": "Which part you'd take",
+    "count": "{{n}} of {{max}}"
+  },
+  "ratings": {
+    "title": "Want to rate each version?",
+    "lead": "Optional: a score from 1 (don't like it) to 5 (love it) for each one.",
+    "open": "Yes, I want to rate them",
+    "skip": "Otherwise, go on to “Review and send”.",
+    "label": "Score for version {{letter}}",
+    "star": "{{n}} of 5",
+    "clear": "Remove the score"
+  },
+  "review": {
+    "title": "Review and send",
+    "lead": "If something isn't how you wanted it, click “Change”.",
+    "skipped": "Not answered",
+    "name": "Your name",
+    "nameHint": "However you want us to know you: your name or your Discord nickname.",
+    "privacy": "We store your name and your answers, nothing else: no email or IP. Only the {{brand}} team sees them.",
+    "pick": "Chosen",
+    "second": "Second choice",
+    "change": "What you'd change",
+    "mix": "Mix",
+    "mixValue": "From {{letter}}: {{part}}",
+    "mixOnly": "From {{letter}}",
+    "ratings": "Scores"
+  },
+  "nav": {
+    "back": "Back",
+    "next": "Next",
+    "review": "Review and send",
+    "send": "Send answers",
+    "sending": "Sending…",
+    "save": "Save changes",
+    "change": "Change"
+  },
+  "done": {
+    "title": "Thank you, {{name}}!",
+    "text": "Your opinion arrived. With the answers we'll choose the version (or the mix) and start building the app.",
+    "edit": "Change my answers",
+    "saved": "Changes saved.",
+    "brand": "Have you answered the logo survey yet?"
+  },
+  "errors": {
+    "invalid_name": "Write a name of 2 to 60 characters.",
+    "invalid_answers": "Some answer isn't valid. Reload the page and try again.",
+    "text_too_long": "Some text is too long.",
+    "too_many_attempts": "Too many submissions from your connection. Wait 15 minutes and try again.",
+    "not_found": "We couldn't find your previous answer. Send it as a new one.",
+    "network": "Can't reach the server. Check your internet and try again.",
+    "generic": "Couldn't send. Try again in a moment."
+  },
+  "steps": {
+    "label": "Steps",
+    "intro": "The 5 versions",
+    "pick": "Your choice",
+    "second": "Second choice",
+    "change": "What you'd change",
+    "mix": "Mix",
+    "ratings": "Scores (optional)",
+    "review": "Review and send",
+    "answered": "answered"
+  }
+}

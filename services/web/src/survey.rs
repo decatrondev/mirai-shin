@@ -1,4 +1,6 @@
-//! Encuesta pública de la marca (`/marca` en la landing).
+//! Encuestas públicas de la landing: la de la marca (`/marca`) y la de la
+//! interfaz de la app (`/interfaz`). Cada una tiene sus preguntas y su
+//! validación; comparten la tabla `survey_responses` (columna `survey`).
 //!
 //! Cualquiera con el enlace responde con su nombre. Se guarda el nombre, las
 //! respuestas, el idioma y las fechas; la IP solo se usa en memoria para el
@@ -23,8 +25,46 @@ use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, time::Instant};
 use uuid::Uuid;
 
-/// Ronda actual de la encuesta. La ronda 2 (votación) tendrá su propio valor.
-const SURVEY: &str = "marca-1";
+/// Encuesta según la dirección (`/api/survey/{kind}`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Kind {
+    Marca,
+    Interfaz,
+}
+
+impl Kind {
+    fn parse(path: &str) -> ApiResult<Self> {
+        match path {
+            "marca" => Ok(Self::Marca),
+            "interfaz" => Ok(Self::Interfaz),
+            _ => Err(ApiError::NotFound),
+        }
+    }
+
+    /// Valor de la columna `survey`. Una ronda nueva tendrá su propio valor.
+    fn id(self) -> &'static str {
+        match self {
+            Self::Marca => "marca-1",
+            Self::Interfaz => "interfaz-1",
+        }
+    }
+
+    /// Lee y valida las respuestas de esta encuesta; devuelve el JSON que se guarda.
+    pub fn check(self, raw: serde_json::Value) -> Result<serde_json::Value, &'static str> {
+        fn typed<T: serde::de::DeserializeOwned + Serialize>(
+            raw: serde_json::Value,
+            validate: fn(&T) -> Result<(), &'static str>,
+        ) -> Result<serde_json::Value, &'static str> {
+            let answers: T = serde_json::from_value(raw).map_err(|_| "invalid_answers")?;
+            validate(&answers)?;
+            serde_json::to_value(answers).map_err(|_| "invalid_answers")
+        }
+        match self {
+            Self::Marca => typed(raw, Answers::validate),
+            Self::Interfaz => typed(raw, UiAnswers::validate),
+        }
+    }
+}
 
 pub const AXES: &[&str] = &[
     "serio_jugueton",
@@ -67,15 +107,20 @@ pub const MAX_COMMENT: usize = 1000;
 pub const NAME_MIN: usize = 2;
 pub const NAME_MAX: usize = 60;
 
+/// Versiones de la interfaz que se comparan (`/direcciones/app/`).
+pub const VERSIONS: &[&str] = &["a", "b", "c", "d", "e"];
+pub const MAX_CHANGE: usize = 500;
+pub const MAX_MIX: usize = 300;
+
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/marca", post(create))
-        .route("/marca/{id}", put(update))
-        .route("/marca/responses", get(list))
-        .route("/marca/responses/{id}", delete(remove))
+        .route("/{kind}", post(create))
+        .route("/{kind}/{id}", put(update))
+        .route("/{kind}/responses", get(list))
+        .route("/{kind}/responses/{id}", delete(remove))
 }
 
-/// Respuestas. Todo es opcional salvo el nombre (va aparte): se puede saltar una pregunta.
+/// Respuestas de la marca. Todo es opcional salvo el nombre (va aparte): se puede saltar una pregunta.
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct Answers {
@@ -131,6 +176,49 @@ impl Answers {
     }
 }
 
+/// Respuestas de la interfaz. Solo la elegida es obligatoria.
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
+pub struct UiAnswers {
+    /// La versión que elegiría.
+    pick: Option<String>,
+    /// Segunda opción, distinta de la elegida.
+    second: Option<String>,
+    /// Qué cambiaría de la elegida.
+    change: String,
+    /// Mezcla: de qué otra versión tomaría algo, y qué parte.
+    mix_from: Option<String>,
+    mix_part: String,
+    /// Notas opcionales por versión, de 1 a 5.
+    ratings: BTreeMap<String, u8>,
+}
+
+impl UiAnswers {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        let version = |v: &Option<String>| v.as_deref().is_none_or(|v| VERSIONS.contains(&v));
+        let Some(pick) = self.pick.as_deref() else {
+            return Err("invalid_answers");
+        };
+        if !VERSIONS.contains(&pick) || !version(&self.second) || !version(&self.mix_from) {
+            return Err("invalid_answers");
+        }
+        if self.second.as_deref() == Some(pick) || self.mix_from.as_deref() == Some(pick) {
+            return Err("invalid_answers");
+        }
+        if self
+            .ratings
+            .iter()
+            .any(|(k, v)| !VERSIONS.contains(&k.as_str()) || !(1..=5).contains(v))
+        {
+            return Err("invalid_answers");
+        }
+        if self.change.chars().count() > MAX_CHANGE || self.mix_part.chars().count() > MAX_MIX {
+            return Err("text_too_long");
+        }
+        Ok(())
+    }
+}
+
 fn distinct_and_known(values: &[String], list: &[&str]) -> bool {
     values
         .iter()
@@ -165,22 +253,22 @@ struct Body {
     name: String,
     #[serde(default)]
     lang: String,
-    answers: Answers,
+    answers: serde_json::Value,
     /// Campo trampa: la página lo deja vacío y oculto; un bot que rellena todo lo llena.
     #[serde(default)]
     website: String,
 }
 
 impl Body {
-    fn checked(self) -> ApiResult<(String, String, Answers)> {
+    fn checked(self, kind: Kind) -> ApiResult<(String, String, serde_json::Value)> {
         let name = clean_name(&self.name).ok_or(ApiError::BadRequest("invalid_name"))?;
-        self.answers.validate().map_err(ApiError::BadRequest)?;
+        let answers = kind.check(self.answers).map_err(ApiError::BadRequest)?;
         let lang = if LANGS.contains(&self.lang.as_str()) {
             self.lang
         } else {
             "es".into()
         };
-        Ok((name, lang, self.answers))
+        Ok((name, lang, answers))
     }
 }
 
@@ -203,9 +291,11 @@ fn count_send(state: &AppState, headers: &HeaderMap) -> ApiResult<()> {
 
 async fn create(
     State(state): State<AppState>,
+    Path(kind): Path<String>,
     headers: HeaderMap,
     Json(body): Json<Body>,
 ) -> ApiResult<Json<Created>> {
+    let kind = Kind::parse(&kind)?;
     count_send(&state, &headers)?;
     // Al bot se le responde como si todo fuera bien, sin guardar nada.
     if !body.website.trim().is_empty() {
@@ -215,35 +305,36 @@ async fn create(
             token: new_token(),
         }));
     }
-    let (name, lang, answers) = body.checked()?;
+    let (name, lang, answers) = body.checked(kind)?;
     let (id, token) = (Uuid::new_v4(), new_token());
     sqlx::query(
         "INSERT INTO survey_responses (id, survey, name, lang, answers, token_hash) VALUES ($1, $2, $3, $4, $5, $6)",
     )
     .bind(id)
-    .bind(SURVEY)
+    .bind(kind.id())
     .bind(&name)
     .bind(&lang)
     .bind(sqlx::types::Json(&answers))
     .bind(hash_token(&token))
     .execute(&state.db)
     .await?;
-    tracing::info!(%id, "encuesta: respuesta nueva");
+    tracing::info!(%id, survey = kind.id(), "encuesta: respuesta nueva");
     Ok(Json(Created { id, token }))
 }
 
 async fn update(
     State(state): State<AppState>,
-    Path(id): Path<Uuid>,
+    Path((kind, id)): Path<(String, Uuid)>,
     headers: HeaderMap,
     Json(body): Json<Body>,
 ) -> ApiResult<Json<serde_json::Value>> {
+    let kind = Kind::parse(&kind)?;
     count_send(&state, &headers)?;
     let token = headers
         .get("x-edit-token")
         .and_then(|v| v.to_str().ok())
         .ok_or(ApiError::Unauthorized)?;
-    let (name, lang, answers) = body.checked()?;
+    let (name, lang, answers) = body.checked(kind)?;
     let done = sqlx::query(
         "UPDATE survey_responses SET name = $1, lang = $2, answers = $3, updated_at = now()
          WHERE id = $4 AND survey = $5 AND token_hash = $6",
@@ -252,7 +343,7 @@ async fn update(
     .bind(&lang)
     .bind(sqlx::types::Json(&answers))
     .bind(id)
-    .bind(SURVEY)
+    .bind(kind.id())
     .bind(hash_token(token))
     .execute(&state.db)
     .await?;
@@ -274,13 +365,18 @@ struct Row {
     updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-async fn list(State(state): State<AppState>, user: ReadyUser) -> ApiResult<Json<Vec<Row>>> {
+async fn list(
+    State(state): State<AppState>,
+    Path(kind): Path<String>,
+    user: ReadyUser,
+) -> ApiResult<Json<Vec<Row>>> {
     user.require(Role::Admin)?;
+    let kind = Kind::parse(&kind)?;
     let rows = sqlx::query_as::<_, Row>(
         "SELECT id, name, lang, answers, created_at, updated_at FROM survey_responses
          WHERE survey = $1 ORDER BY created_at",
     )
-    .bind(SURVEY)
+    .bind(kind.id())
     .fetch_all(&state.db)
     .await?;
     Ok(Json(rows))
@@ -290,18 +386,19 @@ async fn list(State(state): State<AppState>, user: ReadyUser) -> ApiResult<Json<
 async fn remove(
     State(state): State<AppState>,
     user: ReadyUser,
-    Path(id): Path<Uuid>,
+    Path((kind, id)): Path<(String, Uuid)>,
 ) -> ApiResult<Json<serde_json::Value>> {
     user.require(Role::Admin)?;
+    let kind = Kind::parse(&kind)?;
     let done = sqlx::query("DELETE FROM survey_responses WHERE id = $1 AND survey = $2")
         .bind(id)
-        .bind(SURVEY)
+        .bind(kind.id())
         .execute(&state.db)
         .await?;
     if done.rows_affected() == 0 {
         return Err(ApiError::NotFound);
     }
-    tracing::info!(%id, by = %user.0.email, "encuesta: respuesta borrada");
+    tracing::info!(%id, survey = kind.id(), by = %user.0.email, "encuesta: respuesta borrada");
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -374,6 +471,59 @@ mod tests {
         assert_eq!(clean_name(&"x".repeat(NAME_MAX + 1)), None);
         assert_eq!(clean_name("Ana\u{0007}"), None);
         assert_eq!(clean_name("Pixi"), Some("Pixi".into()));
+    }
+
+    fn ui(json: &str) -> Result<serde_json::Value, &'static str> {
+        Kind::Interfaz.check(serde_json::from_str(json).unwrap())
+    }
+
+    #[test]
+    fn interfaz_pide_la_elegida() {
+        assert!(ui(r#"{}"#).is_err());
+        assert!(ui(r#"{"pick":"c"}"#).is_ok());
+        assert!(ui(r#"{"pick":"z"}"#).is_err());
+    }
+
+    #[test]
+    fn interfaz_completa_es_valida() {
+        let v = ui(
+            r#"{"pick":"c","second":"e","change":"menos gris","mixFrom":"b","mixPart":"arrastrar",
+                       "ratings":{"a":3,"c":5,"e":4}}"#,
+        )
+        .unwrap();
+        assert_eq!(v["mixFrom"], "b");
+        assert_eq!(v["ratings"]["c"], 5);
+    }
+
+    #[test]
+    fn interfaz_rechaza_repetidas_y_notas_fuera_de_rango() {
+        assert!(ui(r#"{"pick":"c","second":"c"}"#).is_err());
+        assert!(ui(r#"{"pick":"c","mixFrom":"c"}"#).is_err());
+        assert!(ui(r#"{"pick":"c","ratings":{"a":0}}"#).is_err());
+        assert!(ui(r#"{"pick":"c","ratings":{"a":6}}"#).is_err());
+        assert!(ui(r#"{"pick":"c","ratings":{"f":3}}"#).is_err());
+        assert!(ui(r#"{"pick":"c","extra":1}"#).is_err());
+    }
+
+    #[test]
+    fn interfaz_limita_el_largo_de_los_textos() {
+        let long = "x".repeat(MAX_CHANGE + 1);
+        assert_eq!(
+            ui(&format!(r#"{{"pick":"a","change":"{long}"}}"#)),
+            Err("text_too_long")
+        );
+        let ok = "ñ".repeat(MAX_MIX);
+        assert!(ui(&format!(r#"{{"pick":"a","mixPart":"{ok}"}}"#)).is_ok());
+    }
+
+    #[test]
+    fn cada_encuesta_valida_lo_suyo() {
+        assert!(Kind::Marca.check(serde_json::json!({"pick":"a"})).is_err());
+        assert!(Kind::Marca
+            .check(serde_json::json!({"words":["vivo"]}))
+            .is_ok());
+        assert!(Kind::parse("otra").is_err());
+        assert_eq!(Kind::parse("interfaz").unwrap().id(), "interfaz-1");
     }
 
     #[test]

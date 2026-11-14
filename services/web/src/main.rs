@@ -1,8 +1,8 @@
 //! `miraishin-web`: API JSON del panel `/admin` de la landing.
 //!
 //! La landing es un build estático que sirve nginx; este binario solo responde
-//! `/api/*`. Tiene las tablas `admin_users` y `survey_responses` (encuesta
-//! pública de la marca) y lee los documentos internos en
+//! `/api/*`. Tiene las tablas `admin_users` y `survey_responses` (encuestas
+//! públicas de la marca y de la interfaz) y lee los documentos internos en
 //! Markdown desde `DOCS_ROOT`, filtrados por el rol de quien pide.
 //!
 //! Subcomandos para el servidor (claves temporales por la salida estándar):

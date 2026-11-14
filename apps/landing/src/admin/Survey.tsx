@@ -35,14 +35,7 @@ export function Survey() {
     try { await api.deleteSurveyResponse(r.id); load() } catch (e) { setError(e instanceof ApiError ? e.code : 'generic') }
   }
 
-  const download = (kind: 'json' | 'csv') => {
-    if (!rows) return
-    const text = kind === 'json' ? JSON.stringify(rows, null, 2) : toCsv(rows)
-    const url = URL.createObjectURL(new Blob([kind === 'csv' ? '﻿' + text : text], { type: kind === 'json' ? 'application/json' : 'text/csv' }))
-    const a = Object.assign(document.createElement('a'), { href: url, download: `${brand.slug}-encuesta-marca.${kind}` })
-    a.click()
-    URL.revokeObjectURL(url)
-  }
+  const download = (kind: 'json' | 'csv') => { if (rows) downloadRows(rows, kind, 'marca', toCsv) }
 
   const count = useMemo(() => {
     const all = rows?.map(r => r.answers) ?? []
@@ -153,7 +146,7 @@ export function Survey() {
   )
 }
 
-function Bars({ title, items, total, t }: { title: string; items: { label: string; n: number }[]; total: number; t: (k: string, o?: Record<string, unknown>) => string }) {
+export function Bars({ title, items, total, t }: { title: string; items: { label: string; n: number }[]; total: number; t: (k: string, o?: Record<string, unknown>) => string }) {
   const max = Math.max(1, ...items.map(i => i.n))
   return (
     <>
@@ -213,15 +206,25 @@ function PersonRow({ r, open, onToggle, onRemove, lang }: { r: SurveyResponse; o
   )
 }
 
+/** Descarga las respuestas en JSON o CSV (el CSV con BOM, para que Excel lea bien las tildes). */
+export function downloadRows<R>(rows: R[], kind: 'json' | 'csv', survey: string, toCsv: (rows: R[]) => string) {
+  const text = kind === 'json' ? JSON.stringify(rows, null, 2) : toCsv(rows)
+  const url = URL.createObjectURL(new Blob([kind === 'csv' ? '\ufeff' + text : text], { type: kind === 'json' ? 'application/json' : 'text/csv' }))
+  const a = Object.assign(document.createElement('a'), { href: url, download: `${brand.slug}-encuesta-${survey}.${kind}` })
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export const csvCell = (v: unknown) => { const s = v === undefined || v === null ? '' : String(v); return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
+
 /** CSV con una columna por pregunta (los ejes y pares, una cada uno). Valores con su id, para poder cruzarlos. */
 function toCsv(rows: SurveyResponse[]): string {
   const head = ['nombre', 'idioma', 'fecha', 'editada', ...AXES.map(a => `personalidad_${a}`), 'palabras', 'simbolos', 'tipo_logo',
     ...STYLE_PAIRS.map(p => `estilo_${p}`), 'paleta', 'tamano_chico', 'evitar', 'comentario']
-  const esc = (v: unknown) => { const s = v === undefined || v === null ? '' : String(v); return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
   const lines = rows.map(r => {
     const a = r.answers
     return [r.name, r.lang, r.createdAt, r.updatedAt, ...AXES.map(ax => a.personality?.[ax]), (a.words ?? []).join('|'), (a.symbols ?? []).join('|'),
-      a.logoType, ...STYLE_PAIRS.map(p => a.styles?.[p]), a.palette, a.small, a.avoid, a.comment].map(esc).join(',')
+      a.logoType, ...STYLE_PAIRS.map(p => a.styles?.[p]), a.palette, a.small, a.avoid, a.comment].map(csvCell).join(',')
   })
   return [head.join(','), ...lines].join('\n')
 }

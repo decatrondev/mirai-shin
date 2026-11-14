@@ -31,7 +31,8 @@
     "close": "Cerrar índice",
     "logout": "Salir",
     "site": "Ver el sitio",
-    "survey": "Encuesta de la marca"
+    "survey": "Encuesta de la marca",
+    "surveyUi": "Encuesta de la interfaz"
   },
   "status": {
     "updated": "Actualizado {{when}}",
@@ -143,5 +144,19 @@
     "noTexts": "Nadie escribió nada todavía.",
     "avoid": "Evitar:",
     "comment": "Comentario:"
+  },
+  "surveyUi": {
+    "title": "Encuesta de la interfaz",
+    "intro": "Respuestas de la encuesta pública para elegir entre las 5 versiones de la app. Enlace para compartir:",
+    "empty": "Todavía no hay respuestas. Comparte el enlace de arriba.",
+    "points": "Puntos (elegida + segunda)",
+    "pointsHelp": "Cada persona da 2 puntos a la versión que eligió y 1 a su segunda opción. Sirve para ver qué versión gusta más aunque no sea la primera de todos.",
+    "ratings": "Notas promedio (opcionales)",
+    "version": "Versión",
+    "avg": "Promedio (1 a 5)",
+    "votes": "Notas",
+    "mixes": "Mezclas propuestas",
+    "changes": "Qué cambiarían, por versión elegida",
+    "chose": "eligió la {{v}}"
   }
 }

@@ -31,7 +31,8 @@
     "close": "Close index",
     "logout": "Sign out",
     "site": "View the site",
-    "survey": "Brand survey"
+    "survey": "Brand survey",
+    "surveyUi": "Interface survey"
   },
   "status": {
     "updated": "Updated {{when}}",
@@ -143,5 +144,19 @@
     "noTexts": "Nobody has written anything yet.",
     "avoid": "Avoid:",
     "comment": "Comment:"
+  },
+  "surveyUi": {
+    "title": "Interface survey",
+    "intro": "Answers to the public survey for choosing between the 5 versions of the app. Link to share:",
+    "empty": "No answers yet. Share the link above.",
+    "points": "Points (choice + second)",
+    "pointsHelp": "Each person gives 2 points to the version they chose and 1 to their second choice. It shows which version people like most even if it isn't everyone's first.",
+    "ratings": "Average scores (optional)",
+    "version": "Version",
+    "avg": "Average (1 to 5)",
+    "votes": "Scores",
+    "mixes": "Proposed mixes",
+    "changes": "What they'd change, by chosen version",
+    "chose": "chose {{v}}"
   }
 }

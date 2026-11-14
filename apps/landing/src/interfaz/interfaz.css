@@ -1,0 +1,61 @@
+/* Encuesta de la interfaz (/interfaz). Usa la base de la de la marca (marca.css: dos columnas, letra
+   fluida, botones) y agrega solo lo propio: las capturas de las 5 versiones. Las capturas son lo único
+   con color; el acento marca lo elegido, como en la marca. */
+.ui .mk-layout { grid-template-columns: 14em minmax(0, 52em); }
+
+.ui img { display: block; width: 100%; height: auto; border-radius: .25em; border: 1px solid var(--line); background: var(--win); }
+.ui-link { color: var(--accent); font-size: .9em; text-underline-offset: .2em; }
+.ui-letter { font: 600 .78em/1.2 var(--head, inherit); font-stretch: 80%; color: var(--muted); letter-spacing: .02em; }
+
+/* portada: las 5 versiones, dos por fila */
+.ui-gallery { list-style: none; margin: .4em 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.8em 1.4em; }
+.ui-version { display: grid; gap: .3em; align-content: start; }
+.ui-version small { color: var(--muted); font-size: .88em; line-height: 1.45; }
+.ui-version .ui-link { justify-self: start; }
+.ui-shot-link { display: block; margin-bottom: .45em; border-radius: .25em; }
+.ui-shot-link:hover img { border-color: var(--muted); }
+.ui-shot-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* elegir: tarjetas con la captura */
+.ui-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1em; }
+.ui-card-wrap { display: grid; gap: .35em; align-content: start; }
+.ui-card { gap: .3em; padding: .7em; }
+.ui-card img { margin-bottom: .4em; }
+.ui-card-live { justify-self: start; padding-left: .7em; }
+.ui-none { align-self: start; justify-self: start; padding: .7em 1.4em; }
+.ui-none[aria-checked="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 600; }
+
+/* qué cambiarías: la elegida en chico, al lado */
+.ui-chosen { display: grid; grid-template-columns: 11em 1fr; gap: 1em; align-items: center; }
+.ui-chosen span { line-height: 1.6; }
+
+/* mezcla */
+.ui-fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: .5em; }
+.ui-fieldset legend { font-weight: 600; padding: 0; margin-bottom: .5em; }
+.ui-letters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5em; }
+.ui-mini { display: grid; gap: .45em; padding: .5em; font-size: .9em; }
+.ui-mini[aria-checked="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* notas */
+.ui-ratings-ask { display: grid; gap: .6em; justify-items: start; }
+.ui-ratings { display: grid; }
+.ui-rate { display: grid; grid-template-columns: 6.5em minmax(0, 1fr) auto; align-items: center; gap: 1em; padding: .7em 0; border-bottom: 1px solid var(--line); }
+.ui-scale { display: flex; gap: .3em; }
+.ui-scale button {
+  font: inherit; font-variant-numeric: tabular-nums; width: 2.3em; height: 2.3em; border-radius: .375em; cursor: pointer;
+  color: var(--fg); background: none; border: 1px solid var(--line);
+}
+.ui-scale button:hover { border-color: var(--muted); }
+.ui-scale button[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+
+@media (max-width: 960px) {
+  .ui .mk-layout { grid-template-columns: minmax(0, 52em); }
+}
+@media (max-width: 640px) {
+  .ui-gallery, .ui-cards { grid-template-columns: minmax(0, 1fr); }
+  .ui-letters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ui-chosen { grid-template-columns: 7em 1fr; }
+  .ui-rate { grid-template-columns: 5em minmax(0, 1fr); }
+  .ui-scale { grid-column: 1 / -1; justify-content: space-between; }
+  .ui-scale button { flex: 1; max-width: 3.2em; }
+}

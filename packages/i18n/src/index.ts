@@ -4,6 +4,8 @@ import adminEs from '../locales/es/admin.json'
 import adminEn from '../locales/en/admin.json'
 import marcaEs from '../locales/es/marca.json'
 import marcaEn from '../locales/en/marca.json'
+import interfazEs from '../locales/es/interfaz.json'
+import interfazEn from '../locales/en/interfaz.json'
 
 // Hoy salen es y en; sumar un idioma es una carpeta más en locales/ y una línea aquí.
 export const LANGS = { es: 'Español', en: 'English' } as const
@@ -12,3 +14,4 @@ export type Lang = keyof typeof LANGS
 export const landing = { es: landingEs, en: landingEn } satisfies Record<Lang, unknown>
 export const admin = { es: adminEs, en: adminEn } satisfies Record<Lang, unknown>
 export const marca = { es: marcaEs, en: marcaEn } satisfies Record<Lang, unknown>
+export const interfaz = { es: interfazEs, en: interfazEn } satisfies Record<Lang, unknown>

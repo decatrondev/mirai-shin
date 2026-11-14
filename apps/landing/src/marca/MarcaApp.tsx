@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import brand from '@brand'
 import { applyTheme, currentTheme, type Theme } from '../theme'
 import { setLang } from '../i18n'
+import { loadDraft, nameOk, saveDraft, sendSurvey, type Sent } from '../surveyClient'
 import { LogoTypeArt, PaletteArt, SmallArt, StyleArt, SymbolArt } from './Samples'
 import './marca.css'
 
@@ -31,39 +32,15 @@ interface Answers {
   avoid: string
   comment: string
 }
-interface Draft { step: number; name: string; answers: Answers; sent: { id: string; token: string } | null; done: boolean }
+interface Draft { step: number; name: string; answers: Answers; sent: Sent | null; done: boolean }
 
 const KEY = 'marca-1'
 const empty = (): Draft => ({
   step: 0, name: '', sent: null, done: false,
   answers: { personality: {}, words: [], symbols: [], logoType: null, styles: {}, palette: null, small: null, avoid: '', comment: '' },
 })
-function load(): Draft {
-  try {
-    const raw = localStorage.getItem(KEY)
-    if (raw) { const d = JSON.parse(raw); return { ...empty(), ...d, answers: { ...empty().answers, ...d.answers } } }
-  } catch { /* sin almacenamiento: se empieza de cero */ }
-  return empty()
-}
-function save(d: Draft) { try { localStorage.setItem(KEY, JSON.stringify(d)) } catch { /* ignorar */ } }
+const load = () => loadDraft(KEY, empty)
 
-async function send(d: Draft, lang: string, website: string): Promise<{ id: string; token: string } | null> {
-  const body = JSON.stringify({ name: d.name, lang, answers: d.answers, website })
-  const headers: Record<string, string> = { 'content-type': 'application/json' }
-  if (d.sent) headers['x-edit-token'] = d.sent.token
-  let res: Response
-  try {
-    res = await fetch(d.sent ? `/api/survey/marca/${d.sent.id}` : '/api/survey/marca', { method: d.sent ? 'PUT' : 'POST', headers, body })
-  } catch { throw new Error('network') }
-  if (!res.ok) {
-    let code = 'generic'
-    try { code = (await res.json()).error ?? code } catch { /* no es JSON */ }
-    throw new Error(code)
-  }
-  return d.sent ? null : res.json()
-}
-
-const nameOk = (n: string) => { const l = n.trim().length; return l >= 2 && l <= 60 }
 /** Si el paso ya tiene alguna respuesta (para marcarlo en la lista). */
 function answered(s: Step, d: Draft): boolean {
   const a = d.answers
@@ -98,7 +75,7 @@ export default function MarcaApp() {
   const step: Step = d.done ? 'review' : STEPS[d.step]
   const lang = i18n.resolvedLanguage === 'en' ? 'en' : 'es'
 
-  useEffect(() => { save(d) }, [d])
+  useEffect(() => { saveDraft(KEY, d) }, [d])
   useEffect(() => { document.title = t('meta.title', { brand: brand.name }) }, [t, lang])
   // Al cambiar de paso, el foco va al título (lectores de pantalla y teclado) y se sube al inicio.
   useEffect(() => {
@@ -114,7 +91,7 @@ export default function MarcaApp() {
   const submit = async () => {
     setBusy(true); setError(''); setNotice('')
     try {
-      const created = await send(d, lang, website)
+      const created = await sendSurvey('marca', { name: d.name, lang, answers: d.answers, website }, d.sent)
       setD(x => ({ ...x, sent: created ?? x.sent, done: true }))
       if (!created) setNotice(t('done.saved'))
     } catch (e) {
@@ -360,7 +337,7 @@ function Intro({ d, headRef, onName, website, onWebsite, onStart }: {
 }) {
   const { t } = useTranslation('marca')
   const [touched, setTouched] = useState(false)
-  const ok = d.name.trim().length >= 2 && d.name.trim().length <= 60
+  const ok = nameOk(d.name)
   const start = (e: FormEvent) => { e.preventDefault(); setTouched(true); if (ok) onStart() }
   return (
     <form className="mk-step mk-intro" onSubmit={start} noValidate>

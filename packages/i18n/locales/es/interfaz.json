@@ -1,0 +1,108 @@
+{
+  "meta": {
+    "title": "Elige cómo se ve la app de {{brand}}"
+  },
+  "versions": {
+    "letter": "Versión {{letter}}",
+    "live": "Ver en vivo",
+    "liveHint": "Se abre en otra pestaña. Ahí puedes tocar los botones y elegir fondos.",
+    "alt": "Captura de la versión {{letter}}: {{name}}",
+    "items": {
+      "a": ["La idea de Pixi", "Barra de arriba fina con el buscador al centro. Los monitores van encima de «Aplicar», en el panel de la derecha."],
+      "b": ["Escritorio a escala", "El panel de la derecha muestra tus monitores como están acomodados. Arrastras un fondo hasta un monitor para aplicarlo."],
+      "c": ["Barra de tareas", "La barra de abajo muestra tus monitores con su fondo y ahí eliges a cuál aplicar. El panel de la derecha queda solo para el fondo."],
+      "d": ["Vista previa en el monitor", "El fondo se ve dentro del monitor elegido, con su forma real. Debajo cambias de monitor."],
+      "e": ["Panel que se abre encima", "Más espacio para la biblioteca: al elegir un fondo se abre un panel encima con los monitores y «Aplicar»."]
+    }
+  },
+  "intro": {
+    "title": "Ayúdanos a elegir cómo se ve la app de {{brand}}",
+    "lead": "{{brand}} es una app de fondos de pantalla animados para Windows y Linux. Tenemos 5 versiones de su ventana y queremos elegir con tu opinión.",
+    "how": "Mira las 5 versiones (puedes abrirlas en vivo) y responde 5 pasos cortos, unos 2 minutos. Solo es obligatorio elegir una. Si cierras la página, al volver sigues donde quedaste.",
+    "start": "Empezar",
+    "edit": "Ya respondiste. Puedes cambiar tus respuestas: se guardan sobre las anteriores."
+  },
+  "pick": {
+    "title": "¿Cuál elegirías?",
+    "lead": "La que usarías todos los días. Si dudas entre dos, la otra va en el paso siguiente.",
+    "required": "Elige una versión para seguir."
+  },
+  "second": {
+    "title": "¿Y tu segunda opción?",
+    "lead": "Si no existiera la que elegiste. Puedes saltar este paso.",
+    "none": "Ninguna"
+  },
+  "change": {
+    "title": "¿Qué cambiarías de la versión {{letter}}?",
+    "lead": "Lo que no te convence, lo que falta o lo que moverías. Puedes dejarlo vacío.",
+    "label": "Qué cambiarías",
+    "count": "{{n}} de {{max}}"
+  },
+  "mix": {
+    "title": "¿Mezclarías algo de otra?",
+    "lead": "Por ejemplo, «la barra de abajo de la C». Puedes saltar este paso.",
+    "from": "De qué versión",
+    "part": "Qué parte tomarías",
+    "count": "{{n}} de {{max}}"
+  },
+  "ratings": {
+    "title": "¿Quieres opinar de cada versión?",
+    "lead": "Es opcional: una nota del 1 (no me gusta) al 5 (me encanta) para cada una.",
+    "open": "Sí, quiero poner notas",
+    "skip": "Si no, sigue con «Revisar y enviar».",
+    "label": "Nota de la versión {{letter}}",
+    "star": "{{n}} de 5",
+    "clear": "Quitar la nota"
+  },
+  "review": {
+    "title": "Revisa y envía",
+    "lead": "Si algo no está como querías, toca «Cambiar».",
+    "skipped": "Sin responder",
+    "name": "Tu nombre",
+    "nameHint": "Como quieras que te reconozcamos: tu nombre o tu apodo de Discord.",
+    "privacy": "Guardamos tu nombre y tus respuestas, nada más: ni correo ni IP. Solo el equipo de {{brand}} las ve.",
+    "pick": "Elegida",
+    "second": "Segunda opción",
+    "change": "Qué cambiarías",
+    "mix": "Mezcla",
+    "mixValue": "De la {{letter}}: {{part}}",
+    "mixOnly": "De la {{letter}}",
+    "ratings": "Notas"
+  },
+  "nav": {
+    "back": "Atrás",
+    "next": "Siguiente",
+    "review": "Revisar y enviar",
+    "send": "Enviar respuestas",
+    "sending": "Enviando…",
+    "save": "Guardar cambios",
+    "change": "Cambiar"
+  },
+  "done": {
+    "title": "¡Gracias, {{name}}!",
+    "text": "Tu opinión llegó. Con las respuestas elegimos la versión (o la mezcla) y empezamos a construir la app.",
+    "edit": "Cambiar mis respuestas",
+    "saved": "Cambios guardados.",
+    "brand": "¿Ya respondiste la encuesta del logo?"
+  },
+  "errors": {
+    "invalid_name": "Escribe un nombre de 2 a 60 caracteres.",
+    "invalid_answers": "Alguna respuesta no es válida. Recarga la página e inténtalo otra vez.",
+    "text_too_long": "Algún texto es demasiado largo.",
+    "too_many_attempts": "Demasiados envíos desde tu conexión. Espera 15 minutos e inténtalo otra vez.",
+    "not_found": "No encontramos tu respuesta anterior. Envíala como nueva.",
+    "network": "No hay conexión con el servidor. Revisa tu internet e inténtalo otra vez.",
+    "generic": "No se pudo enviar. Inténtalo otra vez en un momento."
+  },
+  "steps": {
+    "label": "Pasos",
+    "intro": "Las 5 versiones",
+    "pick": "Tu elegida",
+    "second": "Segunda opción",
+    "change": "Qué cambiarías",
+    "mix": "Mezcla",
+    "ratings": "Notas (opcional)",
+    "review": "Revisar y enviar",
+    "answered": "respondido"
+  }
+}
