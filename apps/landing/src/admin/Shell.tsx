@@ -58,6 +58,7 @@ export function Shell({ theme, onToggleTheme }: Props) {
               {tree && <Tree nodes={tree} />}
               <p className="adm-group adm-group-sep" aria-hidden="true" />
               {user && user.role !== 'VIEWER' && <NavLink to="/admin/survey" className="adm-link">{t('nav.survey')}</NavLink>}
+              {user && user.role !== 'VIEWER' && <NavLink to="/admin/survey-logo" className="adm-link">{t('nav.surveyLogo')}</NavLink>}
               {user && user.role !== 'VIEWER' && <NavLink to="/admin/survey-ui" className="adm-link">{t('nav.surveyUi')}</NavLink>}
               {user?.role === 'SUPERADMIN' && <NavLink to="/admin/users" className="adm-link">{t('nav.users')}</NavLink>}
               <NavLink to="/admin/account" className="adm-link">{t('nav.account')}</NavLink>

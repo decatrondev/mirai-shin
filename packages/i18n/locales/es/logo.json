@@ -1,0 +1,105 @@
+{
+  "meta": {
+    "title": "Vota el logo de {{brand}}"
+  },
+  "proposals": {
+    "sello": { "name": "Sello hanko", "desc": "Un sello japonés de bordes irregulares con el kanji 芯 a pincel." },
+    "enso": { "name": "Ensō con el nombre", "desc": "Un círculo de un solo trazo de pincel con el 芯 adentro, y el nombre al lado." },
+    "mecha": { "name": "芯 con la mecha", "desc": "El punto central del 心 («corazón») es una llama: el centro que da luz." },
+    "kitsune": { "name": "Kitsune", "desc": "Una cara de zorro simple con el 芯 en la frente." }
+  },
+  "palettes": {
+    "actual": { "name": "Grafito y verde agua", "desc": "La de la página y la app hoy." },
+    "hora_azul": { "name": "Hora azul", "desc": "Antes del amanecer: azul tinta y violeta." },
+    "sello": { "name": "Papel y bermellón", "desc": "Como un sello japonés sobre papel." }
+  },
+  "intro": {
+    "title": "Vota el logo de {{brand}}",
+    "lead": "Con las respuestas de la primera encuesta armamos 4 propuestas: todas llevan el kanji 芯 a pincel, con formas suaves. Ahora elegimos una, y sus colores, con tu voto.",
+    "how": "Son 6 pasos cortos, unos 2 minutos. Solo es obligatorio elegir una propuesta y sus colores. Si cierras la página, al volver sigues donde quedaste.",
+    "small": "En la barra de tareas y en la bandeja el logo mide 16 píxeles: ahí va una versión simple con la llama (el recuadro chico de cada propuesta, en su tamaño real).",
+    "smallTitle": "En tamaño real: 32, 24 y 16 píxeles",
+    "sheet": "Ver todas las propuestas en grande",
+    "start": "Empezar",
+    "edit": "Ya votaste. Puedes cambiar tus respuestas: se guardan sobre las anteriores."
+  },
+  "pick": {
+    "title": "¿Cuál elegirías?",
+    "lead": "La que mejor representa a {{brand}}. Si dudas entre dos, la otra va en el paso siguiente.",
+    "required": "Elige una propuesta para seguir."
+  },
+  "second": {
+    "title": "¿Y tu segunda opción?",
+    "lead": "Si no existiera la que elegiste. Puedes saltar este paso.",
+    "none": "Ninguna"
+  },
+  "palette": {
+    "title": "¿Con qué colores?",
+    "lead": "Así se ve tu elegida en cada paleta.",
+    "required": "Elige una paleta para seguir."
+  },
+  "ratings": {
+    "title": "¿Quieres opinar de cada propuesta?",
+    "lead": "Es opcional: una nota del 1 (no me gusta) al 5 (me encanta) para cada una.",
+    "open": "Sí, quiero poner notas",
+    "skip": "Si no, sigue con «Siguiente».",
+    "label": "Nota de «{{name}}»",
+    "star": "{{n}} de 5",
+    "clear": "Quitar la nota"
+  },
+  "comment": {
+    "title": "¿Algo que cambiarías?",
+    "lead": "De tu elegida o de cualquier otra: formas, colores, ideas. Puedes dejarlo vacío.",
+    "label": "Comentario",
+    "count": "{{n}} de {{max}}"
+  },
+  "review": {
+    "title": "Revisa y envía",
+    "lead": "Si algo no está como querías, toca «Cambiar».",
+    "skipped": "Sin responder",
+    "name": "Tu nombre",
+    "nameHint": "Como quieras que te reconozcamos: tu nombre o tu apodo de Discord.",
+    "privacy": "Guardamos tu nombre y tus respuestas, nada más: ni correo ni IP. Solo el equipo de {{brand}} las ve.",
+    "pick": "Elegida",
+    "second": "Segunda opción",
+    "palette": "Colores",
+    "ratings": "Notas",
+    "comment": "Comentario"
+  },
+  "nav": {
+    "back": "Atrás",
+    "next": "Siguiente",
+    "review": "Revisar y enviar",
+    "send": "Enviar voto",
+    "sending": "Enviando…",
+    "save": "Guardar cambios",
+    "change": "Cambiar"
+  },
+  "done": {
+    "title": "¡Gracias, {{name}}!",
+    "text": "Tu voto llegó. Con los resultados terminamos el logo: el ícono en todos los tamaños, los colores y una guía corta de uso.",
+    "edit": "Cambiar mis respuestas",
+    "saved": "Cambios guardados.",
+    "interfaz": "¿Ya respondiste la encuesta de la interfaz de la app?"
+  },
+  "errors": {
+    "invalid_name": "Escribe un nombre de 2 a 60 caracteres.",
+    "invalid_answers": "Alguna respuesta no es válida. Recarga la página e inténtalo otra vez.",
+    "text_too_long": "Algún texto es demasiado largo.",
+    "too_many_attempts": "Demasiados envíos desde tu conexión. Espera 15 minutos e inténtalo otra vez.",
+    "not_found": "No encontramos tu respuesta anterior. Envíala como nueva.",
+    "network": "No hay conexión con el servidor. Revisa tu internet e inténtalo otra vez.",
+    "generic": "No se pudo enviar. Inténtalo otra vez en un momento."
+  },
+  "steps": {
+    "label": "Pasos",
+    "intro": "Las 4 propuestas",
+    "pick": "Tu elegida",
+    "second": "Segunda opción",
+    "palette": "Colores",
+    "ratings": "Notas (opcional)",
+    "comment": "Comentario",
+    "review": "Revisar y enviar",
+    "answered": "respondido"
+  }
+}

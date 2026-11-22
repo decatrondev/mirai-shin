@@ -15,8 +15,11 @@ export interface SurveyAnswers {
 export interface UiAnswers {
   pick?: string; second?: string | null; change?: string; mixFrom?: string | null; mixPart?: string; ratings?: Record<string, number>
 }
+export interface LogoAnswers {
+  pick?: string; second?: string | null; palette?: string; ratings?: Record<string, number>; comment?: string
+}
 export interface SurveyResponse<A = SurveyAnswers> { id: string; name: string; lang: string; answers: A; createdAt: string; updatedAt: string }
-export type SurveyKind = 'marca' | 'interfaz'
+export type SurveyKind = 'marca' | 'logo' | 'interfaz'
 interface Session { token: string; user: User }
 
 export const MIN_PASSWORD = 12

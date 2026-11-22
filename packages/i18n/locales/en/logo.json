@@ -1,0 +1,105 @@
+{
+  "meta": {
+    "title": "Vote for the {{brand}} logo"
+  },
+  "proposals": {
+    "sello": { "name": "Hanko seal", "desc": "A Japanese seal with rough edges and the kanji 芯 in brush strokes." },
+    "enso": { "name": "Ensō with the name", "desc": "A single brush-stroke circle with 芯 inside, and the name next to it." },
+    "mecha": { "name": "芯 with the wick", "desc": "The center dot of 心 (\"heart\") is a flame: the core that gives light." },
+    "kitsune": { "name": "Kitsune", "desc": "A simple fox face with 芯 on its forehead." }
+  },
+  "palettes": {
+    "actual": { "name": "Graphite and aqua", "desc": "The one the site and the app use today." },
+    "hora_azul": { "name": "Blue hour", "desc": "Before dawn: ink blue and violet." },
+    "sello": { "name": "Paper and vermilion", "desc": "Like a Japanese seal on paper." }
+  },
+  "intro": {
+    "title": "Vote for the {{brand}} logo",
+    "lead": "From the answers to the first survey we made 4 proposals: all of them have the kanji 芯 in brush strokes, with soft shapes. Now we pick one, and its colors, with your vote.",
+    "how": "6 short steps, about 2 minutes. Only the proposal and its colors are required. If you close the page, you'll pick up where you left off.",
+    "small": "On the taskbar and in the system tray the logo is 16 pixels: there it uses a simple version with the flame (the small box under each proposal, at real size).",
+    "smallTitle": "At real size: 32, 24 and 16 pixels",
+    "sheet": "See all proposals in large",
+    "start": "Start",
+    "edit": "You already voted. You can change your answers: they replace the previous ones."
+  },
+  "pick": {
+    "title": "Which one would you pick?",
+    "lead": "The one that best represents {{brand}}. If you're torn between two, the other goes in the next step.",
+    "required": "Pick a proposal to continue."
+  },
+  "second": {
+    "title": "And your second choice?",
+    "lead": "If the one you picked didn't exist. You can skip this step.",
+    "none": "None"
+  },
+  "palette": {
+    "title": "Which colors?",
+    "lead": "This is how your pick looks in each palette.",
+    "required": "Pick a palette to continue."
+  },
+  "ratings": {
+    "title": "Want to rate each proposal?",
+    "lead": "Optional: a score from 1 (don't like it) to 5 (love it) for each one.",
+    "open": "Yes, I want to rate them",
+    "skip": "If not, go on with \"Next\".",
+    "label": "Score for \"{{name}}\"",
+    "star": "{{n}} of 5",
+    "clear": "Remove the score"
+  },
+  "comment": {
+    "title": "Anything you'd change?",
+    "lead": "In your pick or any other: shapes, colors, ideas. You can leave it empty.",
+    "label": "Comment",
+    "count": "{{n}} of {{max}}"
+  },
+  "review": {
+    "title": "Review and send",
+    "lead": "If something isn't how you wanted, tap \"Change\".",
+    "skipped": "Not answered",
+    "name": "Your name",
+    "nameHint": "However you want us to know you: your name or your Discord nickname.",
+    "privacy": "We store your name and your answers, nothing else: no email, no IP. Only the {{brand}} team sees them.",
+    "pick": "Pick",
+    "second": "Second choice",
+    "palette": "Colors",
+    "ratings": "Scores",
+    "comment": "Comment"
+  },
+  "nav": {
+    "back": "Back",
+    "next": "Next",
+    "review": "Review and send",
+    "send": "Send vote",
+    "sending": "Sending…",
+    "save": "Save changes",
+    "change": "Change"
+  },
+  "done": {
+    "title": "Thanks, {{name}}!",
+    "text": "Your vote is in. With the results we'll finish the logo: the icon at every size, the colors and a short usage guide.",
+    "edit": "Change my answers",
+    "saved": "Changes saved.",
+    "interfaz": "Have you answered the survey about the app's interface?"
+  },
+  "errors": {
+    "invalid_name": "Write a name of 2 to 60 characters.",
+    "invalid_answers": "Some answer isn't valid. Reload the page and try again.",
+    "text_too_long": "Some text is too long.",
+    "too_many_attempts": "Too many submissions from your connection. Wait 15 minutes and try again.",
+    "not_found": "We couldn't find your previous answer. Send it as a new one.",
+    "network": "Can't reach the server. Check your connection and try again.",
+    "generic": "It couldn't be sent. Try again in a moment."
+  },
+  "steps": {
+    "label": "Steps",
+    "intro": "The 4 proposals",
+    "pick": "Your pick",
+    "second": "Second choice",
+    "palette": "Colors",
+    "ratings": "Scores (optional)",
+    "comment": "Comment",
+    "review": "Review and send",
+    "answered": "answered"
+  }
+}

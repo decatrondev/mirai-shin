@@ -1,4 +1,4 @@
-/* Lo que comparten las encuestas públicas (/marca y /interfaz): el borrador en el navegador y el envío. */
+/* Lo que comparten las encuestas públicas (/marca, /marca/ronda-1 y /interfaz): el borrador en el navegador y el envío. */
 
 export interface Sent { id: string; token: string }
 
@@ -15,7 +15,7 @@ export function saveDraft(key: string, d: unknown) { try { localStorage.setItem(
 
 /** Crea la respuesta (devuelve id y código) o, si ya se envió, la cambia con su código (devuelve null).
  *  Si falla, el mensaje del error es el código de la API (`errors.<código>` en los textos). */
-export async function sendSurvey(kind: 'marca' | 'interfaz', body: { name: string; lang: string; answers: unknown; website: string }, sent: Sent | null): Promise<Sent | null> {
+export async function sendSurvey(kind: 'marca' | 'logo' | 'interfaz', body: { name: string; lang: string; answers: unknown; website: string }, sent: Sent | null): Promise<Sent | null> {
   const headers: Record<string, string> = { 'content-type': 'application/json' }
   if (sent) headers['x-edit-token'] = sent.token
   let res: Response

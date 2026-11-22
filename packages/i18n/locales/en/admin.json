@@ -31,8 +31,9 @@
     "close": "Close index",
     "logout": "Sign out",
     "site": "View the site",
-    "survey": "Brand survey",
-    "surveyUi": "Interface survey"
+    "survey": "Brand survey (round 1)",
+    "surveyUi": "Interface survey",
+    "surveyLogo": "Logo vote (round 2)"
   },
   "status": {
     "updated": "Updated {{when}}",
@@ -118,7 +119,7 @@
     "generic": "Something failed on the server. Try again in a moment."
   },
   "survey": {
-    "title": "Brand survey",
+    "title": "Brand survey (round 1)",
     "intro": "Answers from the public survey for creating the logo. Link to share:",
     "count_one": "answer",
     "count_other": "answers",
@@ -158,5 +159,17 @@
     "mixes": "Proposed mixes",
     "changes": "What they'd change, by chosen version",
     "chose": "chose {{v}}"
+  },
+  "surveyLogo": {
+    "title": "Logo vote (round 2)",
+    "intro": "Answers to the public vote between the 4 logo proposals. Link to share:",
+    "empty": "No votes yet. Share the link above.",
+    "points": "Points (pick + second)",
+    "pointsHelp": "Each person gives 2 points to the proposal they picked and 1 to their second choice.",
+    "byPalette": "Proposal and palette together",
+    "ratings": "Average scores (optional)",
+    "proposal": "Proposal",
+    "comments": "Comments",
+    "sheet": "Sheet with the proposals"
   }
 }

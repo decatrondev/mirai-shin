@@ -71,7 +71,7 @@ export function Survey() {
   return (
     <section className="adm-doc adm-wide sv">
       <h1>{t('survey.title')}</h1>
-      <p className="adm-muted">{t('survey.intro')} <a href="/marca" target="_blank" rel="noreferrer">{location.host}/marca</a></p>
+      <p className="adm-muted">{t('survey.intro')} <a href="/marca/ronda-1" target="_blank" rel="noreferrer">{location.host}/marca/ronda-1</a></p>
       <p className="sv-total"><b>{total}</b> {t('survey.count', { count: total })}</p>
       {total > 0 && (
         <p className="sv-actions">

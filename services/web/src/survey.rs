@@ -1,5 +1,5 @@
-//! Encuestas públicas de la landing: la de la marca (`/marca`) y la de la
-//! interfaz de la app (`/interfaz`). Cada una tiene sus preguntas y su
+//! Encuestas públicas de la landing: la de la marca (ronda 1, `/marca/ronda-1`),
+//! la votación del logo (ronda 2, `/marca`) y la de la interfaz de la app (`/interfaz`). Cada una tiene sus preguntas y su
 //! validación; comparten la tabla `survey_responses` (columna `survey`).
 //!
 //! Cualquiera con el enlace responde con su nombre. Se guarda el nombre, las
@@ -29,6 +29,8 @@ use uuid::Uuid;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Kind {
     Marca,
+    /// Ronda 2 de la marca: votación entre las propuestas de logo.
+    Logo,
     Interfaz,
 }
 
@@ -36,6 +38,7 @@ impl Kind {
     fn parse(path: &str) -> ApiResult<Self> {
         match path {
             "marca" => Ok(Self::Marca),
+            "logo" => Ok(Self::Logo),
             "interfaz" => Ok(Self::Interfaz),
             _ => Err(ApiError::NotFound),
         }
@@ -45,6 +48,7 @@ impl Kind {
     fn id(self) -> &'static str {
         match self {
             Self::Marca => "marca-1",
+            Self::Logo => "marca-2",
             Self::Interfaz => "interfaz-1",
         }
     }
@@ -61,6 +65,7 @@ impl Kind {
         }
         match self {
             Self::Marca => typed(raw, Answers::validate),
+            Self::Logo => typed(raw, LogoAnswers::validate),
             Self::Interfaz => typed(raw, UiAnswers::validate),
         }
     }
@@ -111,6 +116,10 @@ pub const NAME_MAX: usize = 60;
 pub const VERSIONS: &[&str] = &["a", "b", "c", "d", "e"];
 pub const MAX_CHANGE: usize = 500;
 pub const MAX_MIX: usize = 300;
+
+/// Propuestas de logo de la ronda 2 (`/direcciones/logo/`) y las paletas en que se muestran.
+pub const PROPOSALS: &[&str] = &["sello", "enso", "mecha", "kitsune"];
+pub const LOGO_PALETTES: &[&str] = &["actual", "hora_azul", "sello"];
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -213,6 +222,48 @@ impl UiAnswers {
             return Err("invalid_answers");
         }
         if self.change.chars().count() > MAX_CHANGE || self.mix_part.chars().count() > MAX_MIX {
+            return Err("text_too_long");
+        }
+        Ok(())
+    }
+}
+
+/// Votación del logo. Obligatorias: la propuesta elegida y la paleta.
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
+pub struct LogoAnswers {
+    pick: Option<String>,
+    /// Segunda opción, distinta de la elegida.
+    second: Option<String>,
+    palette: Option<String>,
+    /// Notas opcionales por propuesta, de 1 a 5.
+    ratings: BTreeMap<String, u8>,
+    comment: String,
+}
+
+impl LogoAnswers {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        let (Some(pick), Some(palette)) = (self.pick.as_deref(), self.palette.as_deref()) else {
+            return Err("invalid_answers");
+        };
+        if !PROPOSALS.contains(&pick) || !LOGO_PALETTES.contains(&palette) {
+            return Err("invalid_answers");
+        }
+        if self
+            .second
+            .as_deref()
+            .is_some_and(|v| v == pick || !PROPOSALS.contains(&v))
+        {
+            return Err("invalid_answers");
+        }
+        if self
+            .ratings
+            .iter()
+            .any(|(k, v)| !PROPOSALS.contains(&k.as_str()) || !(1..=5).contains(v))
+        {
+            return Err("invalid_answers");
+        }
+        if self.comment.chars().count() > MAX_COMMENT {
             return Err("text_too_long");
         }
         Ok(())
@@ -524,6 +575,46 @@ mod tests {
             .is_ok());
         assert!(Kind::parse("otra").is_err());
         assert_eq!(Kind::parse("interfaz").unwrap().id(), "interfaz-1");
+    }
+
+    fn logo(json: &str) -> Result<serde_json::Value, &'static str> {
+        Kind::Logo.check(serde_json::from_str(json).unwrap())
+    }
+
+    #[test]
+    fn logo_pide_propuesta_y_paleta() {
+        assert!(logo(r#"{}"#).is_err());
+        assert!(logo(r#"{"pick":"mecha"}"#).is_err());
+        assert!(logo(r#"{"palette":"actual"}"#).is_err());
+        assert!(logo(r#"{"pick":"mecha","palette":"actual"}"#).is_ok());
+        assert!(logo(r#"{"pick":"otra","palette":"actual"}"#).is_err());
+        assert!(logo(r#"{"pick":"mecha","palette":"mono"}"#).is_err());
+    }
+
+    #[test]
+    fn logo_completo_es_valido() {
+        let v = logo(
+            r#"{"pick":"sello","second":"kitsune","palette":"hora_azul","ratings":{"enso":2,"mecha":5},"comment":"la llama"}"#,
+        )
+        .unwrap();
+        assert_eq!(v["second"], "kitsune");
+        assert_eq!(v["ratings"]["mecha"], 5);
+    }
+
+    #[test]
+    fn logo_rechaza_repetidas_notas_malas_y_textos_largos() {
+        assert!(logo(r#"{"pick":"sello","second":"sello","palette":"sello"}"#).is_err());
+        assert!(logo(r#"{"pick":"sello","palette":"sello","ratings":{"enso":6}}"#).is_err());
+        assert!(logo(r#"{"pick":"sello","palette":"sello","ratings":{"a":3}}"#).is_err());
+        assert!(logo(r#"{"pick":"sello","palette":"sello","extra":1}"#).is_err());
+        let long = "x".repeat(MAX_COMMENT + 1);
+        assert_eq!(
+            logo(&format!(
+                r#"{{"pick":"enso","palette":"actual","comment":"{long}"}}"#
+            )),
+            Err("text_too_long")
+        );
+        assert_eq!(Kind::parse("logo").unwrap().id(), "marca-2");
     }
 
     #[test]

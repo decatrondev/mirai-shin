@@ -31,8 +31,9 @@
     "close": "Cerrar índice",
     "logout": "Salir",
     "site": "Ver el sitio",
-    "survey": "Encuesta de la marca",
-    "surveyUi": "Encuesta de la interfaz"
+    "survey": "Encuesta de la marca (ronda 1)",
+    "surveyUi": "Encuesta de la interfaz",
+    "surveyLogo": "Votación del logo (ronda 2)"
   },
   "status": {
     "updated": "Actualizado {{when}}",
@@ -118,7 +119,7 @@
     "generic": "Algo falló en el servidor. Vuelve a probar en un momento."
   },
   "survey": {
-    "title": "Encuesta de la marca",
+    "title": "Encuesta de la marca (ronda 1)",
     "intro": "Respuestas de la encuesta pública para crear el logo. Enlace para compartir:",
     "count_one": "respuesta",
     "count_other": "respuestas",
@@ -158,5 +159,17 @@
     "mixes": "Mezclas propuestas",
     "changes": "Qué cambiarían, por versión elegida",
     "chose": "eligió la {{v}}"
+  },
+  "surveyLogo": {
+    "title": "Votación del logo (ronda 2)",
+    "intro": "Respuestas de la votación pública entre las 4 propuestas de logo. Enlace para compartir:",
+    "empty": "Todavía no hay votos. Comparte el enlace de arriba.",
+    "points": "Puntos (elegida + segunda)",
+    "pointsHelp": "Cada persona da 2 puntos a la propuesta que eligió y 1 a su segunda opción.",
+    "byPalette": "Propuesta y paleta juntas",
+    "ratings": "Notas promedio (opcionales)",
+    "proposal": "Propuesta",
+    "comments": "Comentarios",
+    "sheet": "Lámina con las propuestas"
   }
 }

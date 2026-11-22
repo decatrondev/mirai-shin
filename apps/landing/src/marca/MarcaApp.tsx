@@ -61,7 +61,7 @@ function answered(s: Step, d: Draft): boolean {
 const toggle = (list: string[], v: string, max: number) =>
   list.includes(v) ? list.filter(x => x !== v) : list.length < max ? [...list, v] : list
 
-/** Encuesta pública de la marca: `/marca`. Una pantalla por grupo de preguntas; borrador en el navegador. */
+/** Encuesta pública de la marca, ronda 1: `/marca/ronda-1` (en `/marca` ahora está la votación del logo). Una pantalla por grupo de preguntas; borrador en el navegador. */
 export default function MarcaApp() {
   const { t, i18n } = useTranslation('marca')
   const [d, setD] = useState<Draft>(load)

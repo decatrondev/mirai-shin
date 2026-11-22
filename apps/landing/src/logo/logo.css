@@ -1,0 +1,36 @@
+/* Votación del logo (/marca, ronda 2). Usa la base de las otras encuestas (marca.css e interfaz.css)
+   y agrega lo propio: los logos sobre el fondo de su paleta. Esos fondos son lo único con color propio;
+   el acento de la página marca lo elegido, como en las otras encuestas. */
+.lg svg { display: block; }
+
+/* portada: cada propuesta en sus 3 paletas, dos propuestas por fila */
+.lg-gallery { list-style: none; margin: .4em 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.8em 1.4em; }
+.lg-item { display: grid; gap: .3em; align-content: start; }
+.lg-item small { color: var(--muted); font-size: .88em; line-height: 1.45; }
+.lg-palettes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .35em; margin-bottom: .45em; }
+.lg-tile { display: block; aspect-ratio: 1; padding: 16%; border-radius: .375em; border: 1px solid var(--line); }
+
+/* la versión chica en tamaño real (px fijos a propósito: así se ve en una barra de tareas) */
+.lg-small { display: inline-flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); justify-self: start; margin-top: .3em; }
+
+/* tarjetas para elegir */
+.lg-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1em; }
+.lg-cards-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.lg-card { gap: .3em; padding: .7em; }
+.lg-stage { display: flex; align-items: center; justify-content: center; gap: 6%; aspect-ratio: 16 / 10; padding: 10%; border-radius: .25em; margin-bottom: .4em; }
+.lg-stage > svg { height: 100%; width: auto; aspect-ratio: 1; }
+.lg-wordmark { font: 600 1.5em/1 var(--head); font-stretch: 80%; white-space: nowrap; }
+.lg-swatches { display: flex; gap: .3em; }
+.lg-swatches i { width: 1.1em; height: 1.1em; border-radius: 50%; border: 1px solid var(--line); }
+
+/* notas */
+.lg-rate { grid-template-columns: 4em minmax(0, 1fr) auto; }
+.lg-rate-mark { display: block; aspect-ratio: 1; padding: 12%; border-radius: .25em; border: 1px solid var(--line); }
+
+.lg-done-mark { display: block; width: 6em; aspect-ratio: 1; padding: 1em; border-radius: .5em; border: 1px solid var(--line); box-sizing: border-box; }
+
+@media (max-width: 640px) {
+  .lg-gallery, .lg-cards, .lg-cards-3 { grid-template-columns: minmax(0, 1fr); }
+  .lg-rate { grid-template-columns: 3.2em minmax(0, 1fr); }
+  .lg-wordmark { font-size: 1.25em; }
+}
